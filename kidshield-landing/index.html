@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KidShield – Parental Control App</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060b14;
+    --surface: #0d1526;
+    --card: #111d35;
+    --accent: #00d4ff;
+    --accent2: #7b5ea7;
+    --green: #00e5a0;
+    --text: #e8f0fe;
+    --muted: #7a8fad;
+    --border: rgba(0,212,255,0.12);
+    --glow: 0 0 40px rgba(0,212,255,0.15);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Nav ── */
+  nav {
+    position: fixed; top: 0; width: 100%; z-index: 100;
+    background: rgba(6,11,20,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 5%;
+    height: 64px;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+  .nav-links { display: flex; gap: 2rem; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color .2s; }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ── Hero ── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 80px 5% 60px;
+    background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0,212,255,0.08) 0%, transparent 70%);
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(0,212,255,0.1); border: 1px solid var(--border);
+    color: var(--accent); font-size: 0.78rem; font-weight: 600;
+    padding: 6px 16px; border-radius: 50px; margin-bottom: 1.5rem;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif; font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800; line-height: 1.1; margin-bottom: 1.2rem;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p { font-size: 1.15rem; color: var(--muted); max-width: 540px; margin: 0 auto 2.5rem; }
+
+  /* ── Download Buttons ── */
+  .download-group {
+    display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 2.5rem;
+  }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent); color: #060b14;
+    font-weight: 700; font-size: 1rem;
+    padding: 14px 32px; border-radius: 12px;
+    text-decoration: none; transition: transform .2s, box-shadow .2s;
+    box-shadow: 0 0 30px rgba(0,212,255,0.35);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 50px rgba(0,212,255,0.5); }
+  .btn-primary svg { width: 20px; height: 20px; }
+
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: transparent; color: var(--text);
+    font-weight: 600; font-size: 1rem;
+    padding: 14px 28px; border-radius: 12px;
+    border: 1px solid var(--border);
+    text-decoration: none; transition: border-color .2s, color .2s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .version-info { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+  .version-info a { color: var(--accent); text-decoration: none; }
+
+  /* ── Stats ── */
+  .stats {
+    display: flex; gap: 3rem; justify-content: center; flex-wrap: wrap;
+    padding: 2rem 5%; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat { text-align: center; }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--accent); }
+  .stat-label { font-size: 0.8rem; color: var(--muted); }
+
+  /* ── Features ── */
+  .section { padding: 80px 5%; }
+  .section-title {
+    font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800;
+    text-align: center; margin-bottom: 0.5rem;
+  }
+  .section-sub { text-align: center; color: var(--muted); margin-bottom: 3rem; }
+
+  .features-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem; max-width: 1100px; margin: 0 auto;
+  }
+  .feature-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.75rem; transition: border-color .2s, transform .2s;
+  }
+  .feature-card:hover { border-color: var(--accent); transform: translateY(-4px); }
+  .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+  .feature-card h3 { font-family: 'Syne', sans-serif; font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .feature-card p { font-size: 0.9rem; color: var(--muted); }
+
+  /* ── How it works ── */
+  .steps { max-width: 700px; margin: 0 auto; }
+  .step {
+    display: flex; gap: 1.5rem; align-items: flex-start;
+    padding: 1.5rem 0; border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    background: rgba(0,212,255,0.12); border: 1px solid var(--border);
+    color: var(--accent); font-family: 'Syne', sans-serif; font-weight: 800;
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step-content h3 { margin-bottom: 0.3rem; }
+  .step-content p { color: var(--muted); font-size: 0.9rem; }
+
+  /* ── Install Steps ── */
+  .install-steps {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 2rem; max-width: 600px; margin: 0 auto;
+  }
+  .install-steps h3 { font-family: 'Syne', sans-serif; margin-bottom: 1rem; color: var(--accent); }
+  .install-steps ol { padding-left: 1.5rem; color: var(--muted); }
+  .install-steps li { margin-bottom: 0.6rem; font-size: 0.9rem; }
+  .install-steps li strong { color: var(--text); }
+
+  /* ── Download CTA ── */
+  .cta-section {
+    text-align: center; padding: 80px 5%;
+    background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,212,255,0.06) 0%, transparent 70%);
+  }
+  .cta-section h2 { font-family: 'Syne', sans-serif; font-size: 2rem; margin-bottom: 1rem; }
+  .cta-section p { color: var(--muted); margin-bottom: 2rem; }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--surface); border-top: 1px solid var(--border);
+    text-align: center; padding: 2rem 5%;
+    color: var(--muted); font-size: 0.85rem;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 600px) {
+    .nav-links { display: none; }
+    .download-group { flex-direction: column; align-items: center; }
+    .stats { gap: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="logo">🛡️ KidShield</div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">कसे वापरायचे</a>
+    <a href="#download">Download</a>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="badge">✨ Version 1.0 — Free for Families</div>
+  <h1>तुमच्या मुलांची<br><span>Digital सुरक्षा</span><br>तुमच्या हातात</h1>
+  <p>Real-time location tracking, app blocking, screen time limits — सगळं एकाच app मध्ये. 100% free.</p>
+
+  <div class="download-group">
+    <!--
+      ══════════════════════════════════════════════════════
+      APK DOWNLOAD LINK — येथे update करा:
+      1. APK sign केल्यावर GitHub Releases वर upload करा
+      2. Release URL copy करा आणि href मध्ये paste करा
+      Example: https://github.com/YOUR_USERNAME/kidshield/releases/download/v1.0/KidShield-v1.0-final.apk
+      ══════════════════════════════════════════════════════
+    -->
+    <a href="https://github.com/YOUR_USERNAME/kidshield/releases/download/v1.0/KidShield-v1.0-final.apk"
+       class="btn-primary" id="apk-download-btn">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M5 20h14v-2H5v2zm7-18L5.33 9h3.84v4h5.66V9h3.84L12 2z"/>
+      </svg>
+      APK Download करा
+    </a>
+    <a href="https://github.com/YOUR_USERNAME/kidshield" class="btn-secondary" target="_blank">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+        <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.71.115 2.51.337 1.909-1.294 2.747-1.02 2.747-1.02.546 1.372.202 2.386.1 2.638.64.7 1.028 1.595 1.028 2.686 0 3.841-2.337 4.687-4.565 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48A10.019 10.019 0 0022 12c0-5.52-4.48-10-10-10z"/>
+      </svg>
+      GitHub
+    </a>
+  </div>
+
+  <div class="version-info">
+    📱 Android 8.0+ &nbsp;|&nbsp; 📦 ~25MB &nbsp;|&nbsp;
+    <a href="https://github.com/YOUR_USERNAME/kidshield/releases" target="_blank">सगळे Releases →</a>
+  </div>
+</section>
+
+<!-- ── Stats ── -->
+<div class="stats">
+  <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Free Forever</div></div>
+  <div class="stat"><div class="stat-num">Real-time</div><div class="stat-label">Location Tracking</div></div>
+  <div class="stat"><div class="stat-num">50+</div><div class="stat-label">App Controls</div></div>
+  <div class="stat"><div class="stat-num">0</div><div class="stat-label">Hidden Fees</div></div>
+</div>
+
+<!-- ── Features ── -->
+<section class="section" id="features">
+  <h2 class="section-title">सगळे Features</h2>
+  <p class="section-sub">एका app मध्ये सगळं parental control</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📍</div>
+      <h3>Real-time Location</h3>
+      <p>मुल कुठे आहे ते map वर live बघा. Geo-fence zone set करा — बाहेर गेल्यावर alert येईल.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🚫</div>
+      <h3>App Blocking</h3>
+      <p>Instagram, YouTube, PUBG — कोणताही app block करा किंवा daily time limit set करा.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌙</div>
+      <h3>Bedtime Schedule</h3>
+      <p>रात्री 10 नंतर automatically phone lock. Social media off. झोप होईल नीट.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <h3>Usage Reports</h3>
+      <p>Weekly bar charts — कोणता app किती वेळ वापरला. Data-driven parenting.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🆘</div>
+      <h3>SOS Button</h3>
+      <p>मुलाने SOS दाबल्यावर तुम्हाला instant notification + exact location.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔔</div>
+      <h3>Smart Alerts</h3>
+      <p>Time limit, geo-fence breach, SOS — सगळ्या alerts real-time push notification.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── How it Works ── -->
+<section class="section" id="how-it-works" style="background: var(--surface);">
+  <h2 class="section-title">कसे वापरायचे</h2>
+  <p class="section-sub">Setup 5 minutes मध्ये होतो</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>Parent Phone वर APK Install करा</h3>
+        <p>खाली Download button दाबा. APK install करा. Parent account बनवा.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>Child Phone वर पण APK Install करा</h3>
+        <p>Child account बनवा. Pairing code enter करा (Parent app मधून मिळेल).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>Permissions Enable करा</h3>
+        <p>Child phone वर: Usage Access, Location, Accessibility Service enable करा. एकदाच करायचे.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h3>Rules Set करा</h3>
+        <p>Parent dashboard मधून apps block करा, geo-fence बनवा, bedtime set करा. Done! 🎉</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Install Instructions ── -->
+<section class="section" id="download">
+  <h2 class="section-title">APK Install कसा करायचा</h2>
+  <p class="section-sub">Play Store नाही — खालील steps follow करा</p>
+  <div class="install-steps">
+    <h3>📱 Android Install Guide</h3>
+    <ol>
+      <li>खाली <strong>APK Download करा</strong> button दाबा</li>
+      <li>Phone मध्ये <strong>Settings → Security → Unknown Sources</strong> enable करा<br>
+          <em>(किंवा Chrome मध्ये: "Allow from this source" दाबा)</em></li>
+      <li>Download झालेला <strong>KidShield.apk</strong> open करा</li>
+      <li><strong>Install</strong> दाबा → Done! ✅</li>
+      <li>App open करा → <strong>Parent</strong> किंवा <strong>Child</strong> account बनवा</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+  <h2>आत्ता Download करा — Free आहे! 🛡️</h2>
+  <p>Setup 5 minutes मध्ये. Credit card नाही. Hidden charges नाही.</p>
+  <a href="https://github.com/YOUR_USERNAME/kidshield/releases/download/v1.0/KidShield-v1.0-final.apk"
+     class="btn-primary">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+      <path d="M5 20h14v-2H5v2zm7-18L5.33 9h3.84v4h5.66V9h3.84L12 2z"/>
+    </svg>
+    APK Download करा (Free)
+  </a>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <p>🛡️ KidShield — मुलांसाठी Safe Digital World</p>
+  <p style="margin-top: 0.5rem;">
+    <a href="https://github.com/YOUR_USERNAME/kidshield" target="_blank">GitHub</a> &nbsp;·&nbsp;
+    Open Source &nbsp;·&nbsp; Made with ❤️ in India
+  </p>
+</footer>
+
+<script>
+  // APK Download analytics (optional)
+  document.querySelectorAll('a[href*=".apk"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      console.log('APK download started');
+      // Google Analytics event येथे add करता येईल
+    });
+  });
+</script>
+
+</body>
+</html>

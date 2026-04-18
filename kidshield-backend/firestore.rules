@@ -1,0 +1,192 @@
+// ═══════════════════════════════════════════════════════════════
+// KidShield — Firestore Security Rules
+// Firebase Console → Firestore → Rules → हे paste करा
+// ═══════════════════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ────────────────────────────────────────
+
+    // User स्वतः logged in आहे का?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // UID match होतो का?
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // User चा Firestore document आणतो
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Parent आहे का?
+    function isParent() {
+      return isAuth() && getUserData(request.auth.uid).role == 'parent';
+    }
+
+    // Child आहे का?
+    function isChild() {
+      return isAuth() && getUserData(request.auth.uid).role == 'child';
+    }
+
+    // हा child या parent चा आहे का?
+    function isMyChild(childId) {
+      return isAuth() && getUserData(childId).parentId == request.auth.uid;
+    }
+
+    // हा parent माझा parent आहे का?
+    function isMyParent(parentId) {
+      return isAuth() && getUserData(request.auth.uid).parentId == parentId;
+    }
+
+    // ────────────────────────────────────────
+    // USERS COLLECTION
+    // ────────────────────────────────────────
+    match /users/{userId} {
+      // स्वतःचा document वाचू शकतो
+      allow read: if isOwner(userId);
+
+      // Parent आपल्या children चे documents वाचू शकतो
+      allow read: if isAuth() && isMyChild(userId);
+
+      // Register/Create — authenticated असेल तर
+      allow create: if isOwner(userId);
+
+      // Update — फक्त स्वतःचा
+      allow update: if isOwner(userId);
+
+      // Delete नको
+      allow delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // USAGE STATS
+    // ────────────────────────────────────────
+    match /usageStats/{docId} {
+      // Parent — त्यांच्या child चे stats वाचू शकतो
+      allow read: if isAuth() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid
+      );
+
+      // Child — स्वतःचे stats write करू शकतो
+      allow create, update: if isAuth() &&
+        request.resource.data.childId == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // LOCATIONS
+    // ────────────────────────────────────────
+    match /locations/{docId} {
+      // Parent — आपल्या child चे location वाचू शकतो
+      allow read: if isAuth() && resource.data.parentId == request.auth.uid;
+
+      // Child — स्वतःचे location write करू शकतो
+      allow create: if isAuth() && request.resource.data.childId == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // APP RULES
+    // ────────────────────────────────────────
+    match /appRules/{ruleId} {
+      // Parent — rules read/write करू शकतो
+      allow read, write: if isAuth() && resource.data.parentId == request.auth.uid;
+
+      // Child — आपल्या rules वाचू शकतो (blocking साठी)
+      allow read: if isAuth() && resource.data.childId == request.auth.uid;
+
+      // Parent — नवीन rule create करू शकतो
+      allow create: if isAuth() && request.resource.data.parentId == request.auth.uid;
+    }
+
+    // ────────────────────────────────────────
+    // COMMANDS
+    // ────────────────────────────────────────
+    match /commands/{cmdId} {
+      // Parent — create करू शकतो (server via Admin SDK करतो)
+      allow read: if isAuth() && resource.data.childId == request.auth.uid;
+
+      // Child — status update करू शकतो (delivered/executed)
+      allow update: if isAuth() &&
+        resource.data.childId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+      // Create/Delete — फक्त server (Admin SDK — rules bypass करतो)
+      allow create, delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // ALERTS
+    // ────────────────────────────────────────
+    match /alerts/{alertId} {
+      // Parent — आपले alerts वाचू शकतो, read mark करू शकतो
+      allow read: if isAuth() && resource.data.parentId == request.auth.uid;
+
+      allow update: if isAuth() &&
+        resource.data.parentId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+      // Create/Delete — Server (Admin SDK)
+      allow create, delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // GEOFENCES
+    // ────────────────────────────────────────
+    match /geofences/{fenceId} {
+      // Parent — create/read/update/delete
+      allow read, write: if isAuth() && (
+        resource == null
+          ? request.resource.data.parentId == request.auth.uid
+          : resource.data.parentId == request.auth.uid
+      );
+
+      // Child — आपले geofences वाचू शकतो (checking साठी)
+      allow read: if isAuth() && resource.data.childId == request.auth.uid;
+    }
+
+    // ────────────────────────────────────────
+    // SOS EVENTS
+    // ────────────────────────────────────────
+    match /sosEvents/{eventId} {
+      // Child — create करू शकतो
+      allow create: if isAuth() && request.resource.data.childId == request.auth.uid;
+
+      // Parent — read करू शकतो
+      allow read: if isAuth() && resource.data.parentId == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // ────────────────────────────────────────
+    // PAIRING CODES
+    // ────────────────────────────────────────
+    match /pairingCodes/{code} {
+      // Parent — create करू शकतो
+      allow create: if isAuth() && request.resource.data.parentId == request.auth.uid;
+
+      // Child — read + delete करू शकतो (pairing साठी)
+      allow read, delete: if isAuth();
+
+      allow update: if false;
+    }
+
+    // ────────────────────────────────────────
+    // DEFAULT — बाकी सगळं deny
+    // ────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

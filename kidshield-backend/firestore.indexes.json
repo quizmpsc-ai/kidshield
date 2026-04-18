@@ -1,0 +1,64 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "usageStats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "childId", "order": "ASCENDING" },
+        { "fieldPath": "parentId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "locations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "childId", "order": "ASCENDING" },
+        { "fieldPath": "parentId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "appRules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "childId", "order": "ASCENDING" },
+        { "fieldPath": "parentId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "commands",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "childId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "parentId", "order": "ASCENDING" },
+        { "fieldPath": "read", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "geofences",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "childId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sosEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "parentId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

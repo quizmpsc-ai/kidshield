@@ -1,0 +1,13 @@
+﻿.env
+*.env.local
+kidshield-firebase-adminsdk*.json
+firebase-adminsdk.json
+*.keystore
+*.jks
+node_modules/
+android/app/build/
+*.apk
+*.aab
+.DS_Store
+Thumbs.db
+.bundle/

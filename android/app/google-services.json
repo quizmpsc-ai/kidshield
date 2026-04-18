@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "966097917754",
+    "firebase_url": "https://kidshield-8744e-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "kidshield-8744e",
+    "storage_bucket": "kidshield-8744e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:966097917754:android:b009d31243824206cf6203",
+        "android_client_info": {
+          "package_name": "com.kidshield"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDASHIzesQR3svu0sQKv3nckIjav0TNZvw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
