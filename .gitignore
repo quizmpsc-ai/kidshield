@@ -11,3 +11,5 @@ android/app/build/
 .DS_Store
 Thumbs.db
 .bundle/
+
+kidshield-backend/serviceAccountKey.json
