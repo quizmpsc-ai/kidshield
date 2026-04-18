@@ -157,9 +157,9 @@
 <!-- LOGIN PAGE -->
 <div id="login-page">
   <div class="login-card">
-    <div class="login-logo">ðŸ›¡ï¸</div>
+    <div class="login-logo">&#128737;&#65039;</div>
     <h1 class="login-title">KidShield</h1>
-    <p class="login-sub">Web Admin Dashboard â€” Parent Login</p>
+    <p class="login-sub">Web Admin Dashboard &#8212; Parent Login</p>
     <div style="margin-bottom:14px">
       <input type="email" id="login-email" placeholder="Email address" />
     </div>
@@ -175,7 +175,7 @@
 <!-- ADD CHILD MODAL -->
 <div class="modal-overlay" id="modal-add-child" onclick="handleModalOutsideClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">ðŸ‘¶ Add Child Device</div>
+    <div class="modal-title">&#128118; Add Child Device</div>
     <div id="modal-step-1">
       <div class="modal-field">
         <label>Child's Name</label>
@@ -188,11 +188,11 @@
       <div class="modal-field">
         <label>Emoji Avatar</label>
         <select id="child-emoji">
-          <option value="ðŸ‘¦">ðŸ‘¦ Boy</option>
-          <option value="ðŸ‘§">ðŸ‘§ Girl</option>
-          <option value="ðŸ§’">ðŸ§’ Child</option>
-          <option value="ðŸ‘¶">ðŸ‘¶ Baby</option>
-          <option value="ðŸ§‘">ðŸ§‘ Teen</option>
+          <option value="&#128102;">&#128102; Boy</option>
+          <option value="&#128103;">&#128103; Girl</option>
+          <option value="&#129490;">&#129490; Child</option>
+          <option value="&#128118;">&#128118; Baby</option>
+          <option value="&#129489;">&#129489; Teen</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -214,7 +214,7 @@
         <p style="font-size:13px;">4. Enable all 5 permissions</p>
       </div>
       <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:12px;background:#0d1a2d;border-radius:10px">
-        â³ Waiting for child device to connect...
+        &#9203; Waiting for child device to connect...
       </div>
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
@@ -226,7 +226,7 @@
 <!-- SCREEN TIME LIMIT MODAL -->
 <div class="modal-overlay" id="modal-time-limit" onclick="handleModalOutsideClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">â±ï¸ Screen Time Limits</div>
+    <div class="modal-title">&#9201;&#65039; Screen Time Limits</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Set daily screen time limit and bedtime for selected child.</p>
     <div class="modal-field">
       <label>Daily Limit (hours)</label>
@@ -262,37 +262,37 @@
 <div id="app">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="sidebar-logo-text">ðŸ›¡ï¸ KidShield</div>
+      <div class="sidebar-logo-text">&#128737;&#65039; KidShield</div>
       <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
     </div>
     <nav style="flex:1;display:flex;flex-direction:column;gap:2px;">
       <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
-        <span class="nav-icon">ðŸ </span><span class="nav-label">Overview</span>
+        <span class="nav-icon">&#127968;</span><span class="nav-label">Overview</span>
       </div>
       <div class="nav-item" onclick="showSection('location')" id="nav-location">
-        <span class="nav-icon">ðŸ“</span><span class="nav-label">Location</span>
+        <span class="nav-icon">&#128205;</span><span class="nav-label">Location</span>
       </div>
       <div class="nav-item" onclick="showSection('live')" id="nav-live">
-        <span class="nav-icon">ðŸ“¹</span><span class="nav-label">Live Monitor</span>
+        <span class="nav-icon">&#128249;</span><span class="nav-label">Live Monitor</span>
       </div>
       <div class="nav-item" onclick="showSection('apps')" id="nav-apps">
-        <span class="nav-icon">ðŸ“±</span><span class="nav-label">App Control</span>
+        <span class="nav-icon">&#128241;</span><span class="nav-label">App Control</span>
       </div>
       <div class="nav-item" onclick="showSection('screentime')" id="nav-screentime">
-        <span class="nav-icon">â±ï¸</span><span class="nav-label">Screen Time</span>
+        <span class="nav-icon">&#9201;&#65039;</span><span class="nav-label">Screen Time</span>
       </div>
       <div class="nav-item" onclick="showSection('filter')" id="nav-filter">
-        <span class="nav-icon">ðŸ”’</span><span class="nav-label">Web Filter</span>
+        <span class="nav-icon">&#128274;</span><span class="nav-label">Web Filter</span>
       </div>
       <div class="nav-item" onclick="showSection('reports')" id="nav-reports">
-        <span class="nav-icon">ðŸ“Š</span><span class="nav-label">Reports</span>
+        <span class="nav-icon">&#128202;</span><span class="nav-label">Reports</span>
       </div>
       <div class="nav-item" onclick="showSection('alerts')" id="nav-alerts">
-        <span class="nav-icon">ðŸ””</span><span class="nav-label">Alerts</span>
+        <span class="nav-icon">&#128276;</span><span class="nav-label">Alerts</span>
       </div>
     </nav>
     <div class="nav-item nav-logout" onclick="doLogout()">
-      <span class="nav-icon">ðŸšª</span><span class="nav-label">Logout</span>
+      <span class="nav-icon">&#128682;</span><span class="nav-label">Logout</span>
     </div>
   </aside>
 
@@ -307,29 +307,29 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div id="device-status-badge" class="stat-badge stat-badge-offline">Offline</div>
-          <div class="stat-icon">â±ï¸</div>
+          <div class="stat-icon">&#9201;&#65039;</div>
           <div class="stat-val" id="stat-screentime">--</div>
           <div class="stat-lbl">Screen Time Today</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">ðŸš«</div>
+          <div class="stat-icon">&#128683;</div>
           <div class="stat-val" id="stat-blocked">--</div>
           <div class="stat-lbl">Blocked Attempts</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">ðŸ”‹</div>
+          <div class="stat-icon">&#128267;</div>
           <div class="stat-val" id="stat-battery">--%</div>
           <div class="stat-lbl">Battery Level</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">ðŸ“</div>
+          <div class="stat-icon">&#128205;</div>
           <div class="stat-val" id="stat-location" style="font-size:16px;margin-top:4px">--</div>
           <div class="stat-lbl">Current Location</div>
         </div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ• Recent Activity</h3>
+          <h3 class="section-title">&#128336; Recent Activity</h3>
           <button class="btn btn-ghost btn-sm" onclick="loadActivity()">Refresh</button>
         </div>
         <div id="activity-list"><div class="loader"><div class="spinner"></div></div></div>
@@ -340,11 +340,11 @@
     <div id="section-location" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ“ Real-time Location</h3>
+          <h3 class="section-title">&#128205; Real-time Location</h3>
           <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
         </div>
         <div id="map-area" class="map-placeholder">
-          <span style="font-size:48px">ðŸ—ºï¸</span>
+          <span style="font-size:48px">&#128506;&#65039;</span>
           <p>Select a child to view location</p>
           <p id="location-coords" style="font-size:13px;color:var(--accent)"></p>
         </div>
@@ -352,7 +352,7 @@
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ  Safe Zones (Geofence)</h3>
+          <h3 class="section-title">&#127968; Safe Zones (Geofence)</h3>
           <button class="btn btn-primary btn-sm" onclick="openGeofenceModal()">+ Add Zone</button>
         </div>
         <div id="geofence-list"><p style="color:var(--muted)">No safe zones configured. Add home, school etc.</p></div>
@@ -362,34 +362,34 @@
     <!-- LIVE MONITOR -->
     <div id="section-live" style="display:none">
       <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#fca5a5;">
-        âš ï¸ <strong>Privacy Notice:</strong> Live monitoring features are for child safety only. Always inform children they may be monitored. Use responsibly and in accordance with local laws.
+        &#9888;&#65039; <strong>Privacy Notice:</strong> Live monitoring features are for child safety only. Always inform children they may be monitored. Use responsibly and in accordance with local laws.
       </div>
       <div class="live-grid">
         <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
-          <div class="live-icon">ðŸ’»</div>
+          <div class="live-icon">&#128187;</div>
           <div class="live-title">Screen Mirror</div>
           <div class="live-status" id="status-screen">Click to start</div>
         </div>
         <div class="live-card" id="card-camera" onclick="toggleLive('camera')">
-          <div class="live-icon">ðŸ“·</div>
+          <div class="live-icon">&#128247;</div>
           <div class="live-title">Remote Camera</div>
           <div class="live-status" id="status-camera">Click to start</div>
         </div>
         <div class="live-card" id="card-audio" onclick="toggleLive('audio')">
-          <div class="live-icon">ðŸŽ¤</div>
+          <div class="live-icon">&#127908;</div>
           <div class="live-title">Ambient Audio</div>
           <div class="live-status" id="status-audio">Click to start</div>
         </div>
         <div class="live-card" id="card-keylog" onclick="toggleLive('keylog')">
-          <div class="live-icon">âŒ¨ï¸</div>
+          <div class="live-icon">&#9000;&#65039;</div>
           <div class="live-title">Keylogger</div>
           <div class="live-status" id="status-keylog">Click to start</div>
         </div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title" id="live-section-title">ðŸ“¹ Live Feed</h3>
-          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">â¹ Stop</button>
+          <h3 class="section-title" id="live-section-title">&#128249; Live Feed</h3>
+          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
         <div class="stream-area" id="stream-area">
           <p style="color:var(--muted)">Select a feature above to start monitoring</p>
@@ -401,7 +401,7 @@
     <div id="section-apps" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ“± Installed Apps</h3>
+          <h3 class="section-title">&#128241; Installed Apps</h3>
           <div style="display:flex;gap:10px;align-items:center">
             <input type="text" placeholder="Search apps..." style="width:180px" oninput="filterApps(this.value)" />
             <button class="btn btn-ghost btn-sm" onclick="loadApps()">Refresh</button>
@@ -415,8 +415,8 @@
     <div id="section-screentime" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">â±ï¸ Screen Time Limits</h3>
-          <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">âœï¸ Edit Limits</button>
+          <h3 class="section-title">&#9201;&#65039; Screen Time Limits</h3>
+          <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">&#9999;&#65039; Edit Limits</button>
         </div>
         <div id="screentime-info">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
@@ -449,7 +449,7 @@
     <!-- WEB FILTER -->
     <div id="section-filter" style="display:none">
       <div class="section">
-        <div class="section-header"><h3 class="section-title">ðŸ”’ Website Filter</h3></div>
+        <div class="section-header"><h3 class="section-title">&#128274; Website Filter</h3></div>
         <div style="margin-bottom:24px">
           <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Category Blocks</h4>
           <div id="category-toggles"><div class="loader"><div class="spinner"></div></div></div>
@@ -469,14 +469,14 @@
     <div id="section-reports" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ“Š Weekly Report</h3>
-          <button class="btn btn-primary btn-sm" onclick="downloadReport()">ðŸ“„ Download PDF</button>
+          <h3 class="section-title">&#128202; Weekly Report</h3>
+          <button class="btn btn-primary btn-sm" onclick="downloadReport()">&#128196; Download PDF</button>
         </div>
         <div id="top-apps-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ“ˆ Website Activity</h3>
+          <h3 class="section-title">&#128200; Website Activity</h3>
         </div>
         <div id="top-sites-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
@@ -486,7 +486,7 @@
     <div id="section-alerts" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">ðŸ”” All Alerts</h3>
+          <h3 class="section-title">&#128276; All Alerts</h3>
           <div style="display:flex;gap:8px">
             <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:8px 12px">
               <option value="">All Types</option>
@@ -609,7 +609,7 @@ async function loadChildren() {
       const tab = document.createElement('div');
       tab.className = 'child-tab' + (currentChildId === child.id ? ' active' : '');
       // FIX: Use actual emoji string from Firestore, not HTML entity
-      const emoji = child.emoji || 'ðŸ‘¦';
+      const emoji = child.emoji || '&#128102;';
       tab.textContent = emoji + ' ' + child.name;
       tab.dataset.childId = child.id;
       tab.onclick = () => selectChild(child.id, tab);
@@ -636,8 +636,8 @@ function openAddChildModal() {
   document.getElementById('modal-step-2').style.display = 'none';
   document.getElementById('child-name').value = '';
   document.getElementById('child-age').value = '';
-  document.getElementById('child-emoji').value = 'ðŸ‘¦';
-  document.getElementById('pairing-status').innerHTML = 'â³ Waiting for child device to connect...';
+  document.getElementById('child-emoji').value = '&#128102;';
+  document.getElementById('pairing-status').innerHTML = '&#9203; Waiting for child device to connect...';
   document.getElementById('pairing-status').style.color = 'var(--muted)';
 }
 
@@ -656,7 +656,7 @@ function handleModalOutsideClick(e) {
 async function generatePairingCode() {
   const name = document.getElementById('child-name').value.trim();
   const age = document.getElementById('child-age').value.trim();
-  const emoji = document.getElementById('child-emoji').value || 'ðŸ‘¦';  // FIX: actual emoji
+  const emoji = document.getElementById('child-emoji').value || '&#128102;';  // FIX: actual emoji
 
   if (!name) { alert('Please enter child name'); return; }
 
@@ -695,7 +695,7 @@ async function generatePairingCode() {
       .onSnapshot(doc => {
         if (doc.data()?.paired) {
           document.getElementById('pairing-status').innerHTML =
-            '<span style="color:var(--success)">âœ… Device Connected! ' + name + ' is now monitored.</span>';
+            '<span style="color:var(--success)">&#9989; Device Connected! ' + name + ' is now monitored.</span>';
           loadChildren();
         }
       });
@@ -742,10 +742,10 @@ function updateStatsUI(data) {
   // FIX: Device online/offline badge
   const badge = document.getElementById('device-status-badge');
   if (data.deviceOnline) {
-    badge.textContent = 'â— Online';
+    badge.textContent = '&#9679; Online';
     badge.className = 'stat-badge stat-badge-online';
   } else {
-    badge.textContent = 'â—‹ Offline';
+    badge.textContent = '&#9675; Offline';
     badge.className = 'stat-badge stat-badge-offline';
   }
 
@@ -791,8 +791,8 @@ async function loadActivity() {
       snap.docs.map(doc => {
         const d = doc.data();
         const time = d.timestamp?.toDate?.()?.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'}) || '--';
-        const typeIcon = d.type === 'web' ? 'ðŸŒ' : d.type === 'app' ? 'ðŸ“±' : 'ðŸ“‹';
-        return '<tr><td style="color:var(--muted);font-size:12px">' + time + '</td><td>' + typeIcon + ' ' + (d.type || '--') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.details || '--') + '</td><td><span class="badge ' + (d.blocked ? 'badge-danger' : 'badge-success') + '">' + (d.blocked ? 'ðŸš« Blocked' : 'âœ… Allowed') + '</span></td></tr>';
+        const typeIcon = d.type === 'web' ? '&#127760;' : d.type === 'app' ? '&#128241;' : '&#128203;';
+        return '<tr><td style="color:var(--muted);font-size:12px">' + time + '</td><td>' + typeIcon + ' ' + (d.type || '--') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.details || '--') + '</td><td><span class="badge ' + (d.blocked ? 'badge-danger' : 'badge-success') + '">' + (d.blocked ? '&#128683; Blocked' : '&#9989; Allowed') + '</span></td></tr>';
       }).join('') + '</tbody></table>';
   } catch (err) {
     document.getElementById('activity-list').innerHTML = '<p style="color:var(--danger);padding:20px">Error loading activity: ' + err.message + '</p>';
@@ -816,10 +816,10 @@ async function toggleLive(mode) {
   document.getElementById('btn-stop-live').style.display = 'inline-block';
 
   const titles = {
-    screen: 'ðŸ’» Screen Mirror',
-    camera: 'ðŸ“· Remote Camera',
-    audio: 'ðŸŽ¤ Ambient Audio',
-    keylog: 'âŒ¨ï¸ Keylogger'
+    screen: '&#128187; Screen Mirror',
+    camera: '&#128247; Remote Camera',
+    audio: '&#127908; Ambient Audio',
+    keylog: '&#9000;&#65039; Keylogger'
   };
   document.getElementById('live-section-title').innerHTML = titles[mode] || 'Live Feed';
 
@@ -838,9 +838,9 @@ async function toggleLive(mode) {
   }
 
   if (mode === 'audio') {
-    streamArea.innerHTML = '<div style="text-align:center;padding:40px;width:100%"><div style="font-size:48px;margin-bottom:16px">ðŸŽ¤</div><p style="color:var(--accent);margin-bottom:16px;font-weight:600">Audio streaming active</p><div style="width:240px;height:10px;background:var(--border);border-radius:5px;margin:0 auto 8px;overflow:hidden"><div id="audio-bar" style="height:100%;background:var(--success);width:0%;transition:width 0.15s;border-radius:5px"></div></div><p style="color:var(--muted);font-size:12px">Listening...</p></div>';
+    streamArea.innerHTML = '<div style="text-align:center;padding:40px;width:100%"><div style="font-size:48px;margin-bottom:16px">&#127908;</div><p style="color:var(--accent);margin-bottom:16px;font-weight:600">Audio streaming active</p><div style="width:240px;height:10px;background:var(--border);border-radius:5px;margin:0 auto 8px;overflow:hidden"><div id="audio-bar" style="height:100%;background:var(--success);width:0%;transition:width 0.15s;border-radius:5px"></div></div><p style="color:var(--muted);font-size:12px">Listening...</p></div>';
   } else if (mode === 'keylog') {
-    streamArea.innerHTML = '<div style="width:100%;padding:20px"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">âŒ¨ï¸ Keystrokes captured:</div><div id="keylog-output" style="font-family:monospace;font-size:13px;color:var(--success);min-height:200px;white-space:pre-wrap;word-break:break-all"></div></div>';
+    streamArea.innerHTML = '<div style="width:100%;padding:20px"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">&#9000;&#65039; Keystrokes captured:</div><div id="keylog-output" style="font-family:monospace;font-size:13px;color:var(--success);min-height:200px;white-space:pre-wrap;word-break:break-all"></div></div>';
   } else {
     streamArea.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Waiting for device response...</p><p style="color:var(--muted);font-size:12px;margin-top:8px">Device must be online and app running</p></div>';
   }
@@ -885,7 +885,7 @@ function stopAllLive() {
   const stopBtn = document.getElementById('btn-stop-live');
   if (stopBtn) stopBtn.style.display = 'none';
   document.getElementById('stream-area').innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
-  document.getElementById('live-section-title').innerHTML = 'ðŸ“¹ Live Feed';
+  document.getElementById('live-section-title').innerHTML = '&#128249; Live Feed';
 }
 
 // ============================
@@ -937,7 +937,7 @@ function renderApps(apps) {
     apps.map(app => {
       const mins = app.todayMinutes || 0;
       const timeStr = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
-      return '<tr><td style="font-weight:600">' + (app.appName || app.id) + '</td><td style="color:var(--muted)">' + timeStr + '</td><td><span class="badge ' + (app.blocked ? 'badge-danger' : 'badge-success') + '">' + (app.blocked ? 'ðŸš« Blocked' : 'âœ… Allowed') + '</span></td><td><label class="toggle"><input type="checkbox" ' + (app.blocked ? 'checked' : '') + ' onchange="toggleApp(\'' + app.id + '\',this.checked)"><span class="toggle-slider"></span></label></td></tr>';
+      return '<tr><td style="font-weight:600">' + (app.appName || app.id) + '</td><td style="color:var(--muted)">' + timeStr + '</td><td><span class="badge ' + (app.blocked ? 'badge-danger' : 'badge-success') + '">' + (app.blocked ? '&#128683; Blocked' : '&#9989; Allowed') + '</span></td><td><label class="toggle"><input type="checkbox" ' + (app.blocked ? 'checked' : '') + ' onchange="toggleApp(\'' + app.id + '\',this.checked)"><span class="toggle-slider"></span></label></td></tr>';
     }).join('') +
     '</tbody></table>';
 }
@@ -964,13 +964,13 @@ async function toggleApp(appId, blocked) {
 // WEB FILTER
 // ============================
 const CATEGORIES = [
-  { key: 'adult', icon: 'ðŸ”ž', label: 'Adult Content' },
-  { key: 'gambling', icon: 'ðŸŽ°', label: 'Gambling' },
-  { key: 'social', icon: 'ðŸ“±', label: 'Social Media' },
-  { key: 'games', icon: 'ðŸŽ®', label: 'Gaming Sites' },
-  { key: 'violence', icon: 'ðŸ’€', label: 'Violence / Gore' },
-  { key: 'drugs', icon: 'ðŸ’Š', label: 'Drugs / Alcohol' },
-  { key: 'dating', icon: 'â¤ï¸', label: 'Dating Sites' },
+  { key: 'adult', icon: '&#128286;', label: 'Adult Content' },
+  { key: 'gambling', icon: '&#127920;', label: 'Gambling' },
+  { key: 'social', icon: '&#128241;', label: 'Social Media' },
+  { key: 'games', icon: '&#127918;', label: 'Gaming Sites' },
+  { key: 'violence', icon: '&#128128;', label: 'Violence / Gore' },
+  { key: 'drugs', icon: '&#128138;', label: 'Drugs / Alcohol' },
+  { key: 'dating', icon: '&#10084;&#65039;', label: 'Dating Sites' },
 ];
 
 async function loadFilter() {
@@ -1004,7 +1004,7 @@ async function loadBlockedDomains() {
     const snap = await db.collection('families').doc(currentParentId)
       .collection('children').doc(currentChildId).collection('blocked_domains').get();
     document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ?
-      snap.docs.map(d => '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span style="color:var(--danger);font-size:13px">ðŸš« ' + d.id + '</span><button class="btn btn-ghost btn-sm" onclick="unblockDomain(\'' + d.id + '\')">Remove</button></div>').join('') :
+      snap.docs.map(d => '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span style="color:var(--danger);font-size:13px">&#128683; ' + d.id + '</span><button class="btn btn-ghost btn-sm" onclick="unblockDomain(\'' + d.id + '\')">Remove</button></div>').join('') :
       '<p style="color:var(--muted);padding:12px 0">No custom blocked domains</p>';
   } catch (err) {
     document.getElementById('blocked-domains-list').innerHTML = '<p style="color:var(--danger)">Error loading domains</p>';
@@ -1079,7 +1079,7 @@ function updateScreenTimeSection(data) {
   const limitEl = document.getElementById('st-daily-limit');
   const bedtimeEl = document.getElementById('st-bedtime');
   if (limitEl) limitEl.textContent = data.dailyLimitHours ? data.dailyLimitHours + 'h' : 'No limit';
-  if (bedtimeEl) bedtimeEl.textContent = data.bedtimeStart && data.bedtimeEnd ? (data.bedtimeStart + ' â€“ ' + data.bedtimeEnd) : 'Not set';
+  if (bedtimeEl) bedtimeEl.textContent = data.bedtimeStart && data.bedtimeEnd ? (data.bedtimeStart + ' &#8211; ' + data.bedtimeEnd) : 'Not set';
 
   const mins = data.todayMinutes || 0;
   const limitMins = (data.dailyLimitHours || 0) * 60;
@@ -1192,7 +1192,7 @@ async function loadReports() {
         '<h4 style="color:var(--muted);font-size:12px;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px">Most Visited Sites</h4>' +
         sorted.map(([site, count]) => {
           const pct = Math.round((count / maxCount) * 100);
-          return '<div class="app-bar-row"><div style="min-width:200px;font-size:13px;color:var(--accent)">ðŸŒ ' + site + '</div><div class="app-bar-bg"><div class="app-bar-fill" style="width:' + pct + '%"></div></div><div style="min-width:40px;text-align:right;font-size:12px;color:var(--muted)">' + count + 'x</div></div>';
+          return '<div class="app-bar-row"><div style="min-width:200px;font-size:13px;color:var(--accent)">&#127760; ' + site + '</div><div class="app-bar-bg"><div class="app-bar-fill" style="width:' + pct + '%"></div></div><div style="min-width:40px;text-align:right;font-size:12px;color:var(--muted)">' + count + 'x</div></div>';
         }).join('');
     }
   } catch (err) {
@@ -1229,16 +1229,16 @@ async function loadAlerts() {
     if (filterVal) docs = docs.filter(d => d.data().type === filterVal);
 
     if (!docs.length) {
-      el.innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center">No alerts ðŸŽ‰ ' + (filterVal ? 'for this category' : '') + '</p>';
+      el.innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center">No alerts &#127881; ' + (filterVal ? 'for this category' : '') + '</p>';
       return;
     }
 
-    const typeIcons = { blocked_site: 'ðŸŒ', blocked_app: 'ðŸ“±', location: 'ðŸ“', screen_time: 'â±ï¸' };
+    const typeIcons = { blocked_site: '&#127760;', blocked_app: '&#128241;', location: '&#128205;', screen_time: '&#9201;&#65039;' };
     el.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Message</th><th>Severity</th></tr></thead><tbody>' +
       docs.map(doc => {
         const d = doc.data();
         const time = d.timestamp?.toDate?.()?.toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) || '--';
-        const icon = typeIcons[d.type] || 'ðŸ””';
+        const icon = typeIcons[d.type] || '&#128276;';
         const severity = d.severity || 'info';
         return '<tr><td style="color:var(--muted);font-size:12px;white-space:nowrap">' + time + '</td><td>' + icon + ' ' + (d.type || '--') + '</td><td style="max-width:250px">' + (d.message || '--') + '</td><td><span class="badge badge-' + (severity === 'high' ? 'danger' : severity === 'medium' ? 'warning' : 'info') + '">' + severity + '</span></td></tr>';
       }).join('') + '</tbody></table>';
