@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="mr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,28 +9,17 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <style>
     :root {
-      --bg: #060b14;
-      --card: #111d35;
-      --accent: #00d4ff;
-      --accent2: #7c3aed;
-      --success: #22c55e;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --text: #ffffff;
-      --muted: #8899aa;
-      --border: #1e3a5f;
+      --bg: #060b14; --card: #111d35; --accent: #00d4ff; --accent2: #7c3aed;
+      --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+      --text: #ffffff; --muted: #8899aa; --border: #1e3a5f;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
-    
-    /* LOGIN PAGE */
     #login-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
     .login-card { background: var(--card); border-radius: 24px; padding: 40px; width: 100%; max-width: 400px; border: 1px solid var(--border); }
     .login-logo { font-size: 48px; text-align: center; margin-bottom: 8px; }
     .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 4px; }
     .login-sub { color: var(--muted); text-align: center; margin-bottom: 32px; font-size: 14px; }
-    
-    /* MAIN LAYOUT */
     #app { display: none; }
     .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; }
     .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
@@ -40,51 +29,35 @@
     .nav-item:hover { background: rgba(0,212,255,0.05); color: var(--text); }
     .nav-item.active { background: rgba(0,212,255,0.1); color: var(--accent); border-left-color: var(--accent); }
     .nav-icon { font-size: 18px; }
-    
     .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
-    
-    /* CHILDREN TABS */
     .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
     .child-tab { background: var(--card); border: 2px solid transparent; border-radius: 40px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
     .child-tab.active { border-color: var(--accent); color: var(--accent); }
-    
-    /* STAT CARDS */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
     .stat-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); }
     .stat-icon { font-size: 28px; margin-bottom: 12px; }
     .stat-val { font-size: 28px; font-weight: 900; }
     .stat-lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
-    
-    /* SECTIONS */
     .section { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
     .section-title { font-size: 16px; font-weight: 700; }
-    
-    /* TABLE */
     table { width: 100%; border-collapse: collapse; }
     th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
     td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(30,58,95,0.5); }
     tr:last-child td { border-bottom: none; }
-    
-    /* BADGE */
     .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
     .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
     .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
     .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
-    
-    /* TOGGLE SWITCH */
     .toggle { position: relative; width: 44px; height: 24px; }
     .toggle input { opacity: 0; width: 0; height: 0; }
     .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #2d3748; border-radius: 24px; transition: 0.3s; }
     .toggle-slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
     input:checked + .toggle-slider { background: var(--accent); }
     input:checked + .toggle-slider:before { transform: translateX(20px); }
-    
-    /* FORMS */
     input[type="text"], input[type="email"], input[type="password"], input[type="number"], select {
       background: #0d1a2d; border: 1px solid var(--border); border-radius: 10px;
-      padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; outline: none;
-      transition: border-color 0.15s;
+      padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: border-color 0.15s;
     }
     input:focus, select:focus { border-color: var(--accent); }
     .btn { padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; border: none; transition: opacity 0.15s; }
@@ -92,23 +65,10 @@
     .btn-primary { background: var(--accent); color: var(--bg); }
     .btn-danger { background: var(--danger); color: white; }
     .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    
-    /* USAGE BAR */
-    .usage-bar { background: #1e3a5f; border-radius: 4px; height: 6px; overflow: hidden; }
-    .usage-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
-    
-    /* MAP PLACEHOLDER */
     .map-placeholder { background: #0d1a2d; border-radius: 12px; height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); border: 1px dashed var(--border); }
-    
-    /* LOADING */
     .loader { display: flex; justify-content: center; padding: 40px; }
     .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    
-    /* ONLINE INDICATOR */
-    .online-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-    
-    /* RESPONSIVE */
     @media (max-width: 768px) {
       .sidebar { width: 60px; }
       .sidebar-logo-text, .nav-label, .sidebar-logo-sub { display: none; }
@@ -118,7 +78,6 @@
 </head>
 <body>
 
-<!-- LOGIN PAGE -->
 <div id="login-page">
   <div class="login-card">
     <div class="login-logo">🛡️</div>
@@ -130,15 +89,13 @@
     <div style="margin-bottom:20px">
       <input type="password" id="login-password" placeholder="Password" />
     </div>
-    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="doLogin()">Login करा</button>
-    <p style="text-align:center;margin-top:16px;font-size:14px;color:#aaa">New user? <a href="#" onclick="doRegister()" style="color:#00d4ff;text-decoration:none;font-weight:bold">Register करा</a></p>
+    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="doLogin()">Login</button>
+    <p style="text-align:center;margin-top:16px;font-size:14px;color:#aaa">New user? <a href="#" onclick="doRegister()" style="color:#00d4ff;text-decoration:none;font-weight:bold">Register</a></p>
     <p id="login-error" style="color:var(--danger);font-size:13px;margin-top:12px;text-align:center;display:none"></p>
   </div>
 </div>
 
-<!-- MAIN APP -->
 <div id="app">
-  <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-text">🛡️ KidShield</div>
@@ -169,23 +126,18 @@
     </nav>
   </aside>
 
-  <!-- Main Content -->
   <main class="main">
-    <!-- Children Tabs -->
     <div class="children-tabs" id="children-tabs">
       <div class="loader"><div class="spinner"></div></div>
     </div>
 
-    <!-- OVERVIEW SECTION -->
     <div id="section-overview">
-      <div class="stats-grid" id="stats-grid">
-        <div class="stat-card"><div class="stat-icon">⏱️</div><div class="stat-val" id="stat-screentime">--</div><div class="stat-lbl">आजचा Screen Time</div></div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon">⏱️</div><div class="stat-val" id="stat-screentime">--</div><div class="stat-lbl">Screen Time Today</div></div>
         <div class="stat-card"><div class="stat-icon">🚫</div><div class="stat-val" id="stat-blocked">--</div><div class="stat-lbl">Blocked Attempts</div></div>
         <div class="stat-card"><div class="stat-icon">🔋</div><div class="stat-val" id="stat-battery">--%</div><div class="stat-lbl">Battery Level</div></div>
         <div class="stat-card"><div class="stat-icon">📍</div><div class="stat-val" id="stat-location">--</div><div class="stat-lbl">Current Location</div></div>
       </div>
-
-      <!-- Recent Activity -->
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">🕐 Recent Activity</h3>
@@ -195,7 +147,6 @@
       </div>
     </div>
 
-    <!-- LOCATION SECTION -->
     <div id="section-location" style="display:none">
       <div class="section">
         <div class="section-header">
@@ -204,70 +155,55 @@
         </div>
         <div class="map-placeholder" id="map-area">
           <span style="font-size:48px">🗺️</span>
-          <p>Google Maps येथे दाखवेल</p>
-          <p style="font-size:12px">Google Maps API key लागेल index.html मध्ये</p>
+          <p>Location will show here</p>
           <p id="location-coords" style="font-size:13px;color:var(--accent)">Loading...</p>
         </div>
       </div>
-      <div class="section">
-        <div class="section-header"><h3 class="section-title">🔵 Geo-fence Zones</h3></div>
-        <div id="geofence-list">Loading...</div>
-      </div>
     </div>
 
-    <!-- APPS SECTION -->
     <div id="section-apps" style="display:none">
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📱 Installed Apps</h3>
-          <div style="display:flex;gap:10px">
-            <input type="text" placeholder="Search apps..." style="width:200px" oninput="filterApps(this.value)" />
-          </div>
+          <input type="text" placeholder="Search apps..." style="width:200px" oninput="filterApps(this.value)" />
         </div>
         <div id="apps-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
     </div>
 
-    <!-- FILTER SECTION -->
     <div id="section-filter" style="display:none">
       <div class="section">
         <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
         <div style="margin-bottom:20px">
-          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;letter-spacing:1px">CATEGORY BLOCKS</h4>
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px">CATEGORY BLOCKS</h4>
           <div id="category-toggles">Loading...</div>
         </div>
         <div>
-          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;letter-spacing:1px">CUSTOM BLOCKED DOMAINS</h4>
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px">CUSTOM BLOCKED DOMAINS</h4>
           <div style="display:flex;gap:10px;margin-bottom:12px">
             <input type="text" id="new-domain" placeholder="example.com" style="flex:1" />
-            <button class="btn btn-primary" onclick="blockDomain()">Block करा</button>
+            <button class="btn btn-primary" onclick="blockDomain()">Block</button>
           </div>
           <div id="blocked-domains-list">Loading...</div>
         </div>
       </div>
     </div>
 
-    <!-- REPORTS SECTION -->
     <div id="section-reports" style="display:none">
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📊 Weekly Report</h3>
           <button class="btn btn-primary" onclick="downloadReport()">📄 PDF Download</button>
         </div>
-        <canvas id="usage-chart" height="200"></canvas>
-      </div>
-      <div class="section">
-        <div class="section-header"><h3 class="section-title">📱 Top Apps This Week</h3></div>
         <div id="top-apps-list">Loading...</div>
       </div>
     </div>
 
-    <!-- ALERTS SECTION -->
     <div id="section-alerts" style="display:none">
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">🔔 All Alerts</h3>
-          <button class="btn btn-ghost" onclick="clearAlerts()">Clear All</button>
+          <button class="btn btn-ghost" onclick="loadAlerts()">Refresh</button>
         </div>
         <div id="alerts-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
@@ -276,29 +212,26 @@
 </div>
 
 <script>
-// ══════════════════════════════════════════
-// FIREBASE CONFIG — replace with your values
-// ══════════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyC6NE6XH7Bv_g1XJRik2wsbMTPxXDglyPs",
+  authDomain: "kidshield-8744e.firebaseapp.com",
+  databaseURL: "https://kidshield-8744e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kidshield-8744e",
+  storageBucket: "kidshield-8744e.firebasestorage.app",
+  messagingSenderId: "966097917754",
+  appId: "1:966097917754:web:67c2cca3cc78ad77cf6203",
+  measurementId: "G-ETHL80VHTS"
 };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// State
 let currentParentId = null;
 let currentChildId = null;
 let allApps = [];
-const BACKEND_URL = 'YOUR_RAILWAY_URL'; // Railway URL
+const BACKEND_URL = 'https://kidshield-0757.onrender.com';
 
-// ── Auth ──
 auth.onAuthStateChanged(user => {
   if (user) {
     currentParentId = user.uid;
@@ -312,19 +245,26 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-async function doRegister() {
-  const email = document.getElementById("login-email").value;
-  const password = document.getElementById("login-password").value;
-  if (!email || !password) { 
-    document.getElementById("login-error").style.display="block";
-    document.getElementById("login-error").textContent="Email आणि Password टाका";
-    return; 
+function doRegister() {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if (!email || !password) {
+    errEl.textContent = 'Please enter email and password';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters';
+    errEl.style.display = 'block';
+    return;
   }
   firebase.auth().createUserWithEmailAndPassword(email, password)
-    .then(() => { showApp(); })
-    .catch(e => { 
-      document.getElementById("login-error").style.display="block";
-      document.getElementById("login-error").textContent=e.message; 
+    .then(() => {})
+    .catch(e => {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
     });
 }
 
@@ -333,24 +273,24 @@ function doLogin() {
   const pass = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  try {
-    await auth.signInWithEmailAndPassword(email, pass);
-  } catch(e) {
-    errEl.textContent = 'Login failed: ' + e.message;
+  if (!email || !pass) {
+    errEl.textContent = 'Please enter email and password';
     errEl.style.display = 'block';
+    return;
   }
+  firebase.auth().signInWithEmailAndPassword(email, pass)
+    .catch(e => {
+      errEl.textContent = 'Login failed: ' + e.message;
+      errEl.style.display = 'block';
+    });
 }
 
-function doLogout() {
-  auth.signOut();
-}
+function doLogout() { auth.signOut(); }
 
-// ── Load Children ──
 async function loadChildren() {
   const snap = await db.collection('families').doc(currentParentId).collection('children').get();
   const tabsEl = document.getElementById('children-tabs');
   tabsEl.innerHTML = '';
-
   snap.forEach(doc => {
     const child = { id: doc.id, ...doc.data() };
     const tab = document.createElement('div');
@@ -358,15 +298,12 @@ async function loadChildren() {
     tab.textContent = (child.emoji || '👦') + ' ' + child.name;
     tab.onclick = () => selectChild(child.id, tab);
     tabsEl.appendChild(tab);
-
     if (!currentChildId) {
       currentChildId = child.id;
       tab.classList.add('active');
       loadChildData();
     }
   });
-
-  // Add child button
   const addBtn = document.createElement('div');
   addBtn.className = 'child-tab';
   addBtn.textContent = '+ Add Child';
@@ -381,55 +318,48 @@ function selectChild(childId, tabEl) {
   loadChildData();
 }
 
-// ── Load Child Data ──
-function loadChildData() {
-  loadActivity();
-  loadLiveStats();
-}
+function loadChildData() { loadActivity(); loadLiveStats(); }
 
 async function loadLiveStats() {
   if (!currentChildId) return;
   const doc = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId).get();
   const data = doc.data() || {};
-
   document.getElementById('stat-screentime').textContent =
-    Math.floor((data.todayMinutes || 0) / 60) + 'h ' + ((data.todayMinutes || 0) % 60) + 'm';
+    Math.floor((data.todayMinutes||0)/60) + 'h ' + ((data.todayMinutes||0)%60) + 'm';
   document.getElementById('stat-blocked').textContent = data.blockedAttempts || 0;
-  document.getElementById('stat-battery').textContent = (data.battery || '--') + '%';
+  document.getElementById('stat-battery').textContent = (data.battery||'--') + '%';
   document.getElementById('stat-location').textContent = data.locationName || '--';
 }
 
 async function loadActivity() {
+  if (!currentChildId) {
+    document.getElementById('activity-list').innerHTML = '<p style="color:var(--muted);padding:20px">No child selected</p>';
+    return;
+  }
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId)
     .collection('activity').orderBy('timestamp', 'desc').limit(20).get();
-
   const el = document.getElementById('activity-list');
-  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">कोणतीही activity नाही</p>'; return; }
-
+  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">No activity yet</p>'; return; }
   el.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Details</th><th>Status</th></tr></thead><tbody>' +
     snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleTimeString('en-IN') || '--';
-      const statusClass = d.blocked ? 'badge-danger' : 'badge-success';
       return `<tr>
         <td style="color:var(--muted)">${time}</td>
-        <td>${d.type || '--'}</td>
-        <td>${d.details || '--'}</td>
-        <td><span class="badge ${statusClass}">${d.blocked ? 'Blocked' : 'Allowed'}</span></td>
+        <td>${d.type||'--'}</td>
+        <td>${d.details||'--'}</td>
+        <td><span class="badge ${d.blocked?'badge-danger':'badge-success'}">${d.blocked?'Blocked':'Allowed'}</span></td>
       </tr>`;
     }).join('') + '</tbody></table>';
 }
 
-// ── Sections ──
 function showSection(name) {
   document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
   document.getElementById('section-' + name).style.display = 'block';
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('nav-' + name)?.classList.add('active');
-
-  // Lazy load
   if (name === 'apps') loadApps();
   if (name === 'filter') loadFilter();
   if (name === 'alerts') loadAlerts();
@@ -438,21 +368,19 @@ function showSection(name) {
 
 async function loadApps() {
   const snap = await db.collection('families').doc(currentParentId)
-    .collection('children').doc(currentChildId)
-    .collection('installed_apps').get();
-
+    .collection('children').doc(currentChildId).collection('installed_apps').get();
   allApps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderApps(allApps);
 }
 
 function renderApps(apps) {
-  document.getElementById('apps-list').innerHTML = '<table><thead><tr><th>App</th><th>Today</th><th>Status</th><th>Blocked</th></tr></thead><tbody>' +
+  document.getElementById('apps-list').innerHTML = apps.length ? '<table><thead><tr><th>App</th><th>Today</th><th>Status</th><th>Block</th></tr></thead><tbody>' +
     apps.map(app => `<tr>
-      <td>${app.appName || app.id}</td>
+      <td>${app.appName||app.id}</td>
       <td>${Math.floor((app.todayMinutes||0)/60)}h${(app.todayMinutes||0)%60}m</td>
-      <td><span class="badge ${app.blocked ? 'badge-danger' : 'badge-success'}">${app.blocked ? 'Blocked' : 'Allowed'}</span></td>
-      <td><label class="toggle"><input type="checkbox" ${app.blocked ? 'checked' : ''} onchange="toggleApp('${app.id}', this.checked)"><span class="toggle-slider"></span></label></td>
-    </tr>`).join('') + '</tbody></table>';
+      <td><span class="badge ${app.blocked?'badge-danger':'badge-success'}">${app.blocked?'Blocked':'Allowed'}</span></td>
+      <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td>
+    </tr>`).join('') + '</tbody></table>' : '<p style="color:var(--muted);padding:20px">No apps found</p>';
 }
 
 function filterApps(q) {
@@ -466,32 +394,29 @@ async function toggleApp(appId, blocked) {
 }
 
 function loadFilter() {
-  const categories = [
-    { key: 'adult', icon: '🔞', label: 'Adult Content' },
-    { key: 'gambling', icon: '🎰', label: 'Gambling' },
-    { key: 'social', icon: '📱', label: 'Social Media' },
-    { key: 'games', icon: '🎮', label: 'Gaming Sites' },
-    { key: 'violence', icon: '💀', label: 'Violence/Gore' },
+  const cats = [
+    { key:'adult', icon:'🔞', label:'Adult Content' },
+    { key:'gambling', icon:'🎰', label:'Gambling' },
+    { key:'social', icon:'📱', label:'Social Media' },
+    { key:'games', icon:'🎮', label:'Gaming Sites' },
+    { key:'violence', icon:'💀', label:'Violence/Gore' },
   ];
-
-  document.getElementById('category-toggles').innerHTML = categories.map(c => `
+  document.getElementById('category-toggles').innerHTML = cats.map(c => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
       <span>${c.icon} ${c.label}</span>
-      <label class="toggle"><input type="checkbox" onchange="toggleCategory('${c.key}', this.checked)"><span class="toggle-slider"></span></label>
-    </div>
-  `).join('');
+      <label class="toggle"><input type="checkbox" onchange="toggleCategory('${c.key}',this.checked)"><span class="toggle-slider"></span></label>
+    </div>`).join('');
   loadBlockedDomains();
 }
 
 async function loadBlockedDomains() {
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId).collection('blocked_domains').get();
-  document.getElementById('blocked-domains-list').innerHTML = snap.docs.map(d =>
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d =>
     `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="color:var(--danger)">🚫 ${d.id}</span>
       <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px" onclick="unblockDomain('${d.id}')">Remove</button>
-    </div>`
-  ).join('') || '<p style="color:var(--muted)">कोणतेही blocked domain नाही</p>';
+    </div>`).join('') : '<p style="color:var(--muted)">No blocked domains</p>';
 }
 
 async function blockDomain() {
@@ -499,7 +424,7 @@ async function blockDomain() {
   if (!domain) return;
   await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId)
-    .collection('blocked_domains').doc(domain).set({ active: true, blockedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    .collection('blocked_domains').doc(domain).set({ active:true, blockedAt: firebase.firestore.FieldValue.serverTimestamp() });
   document.getElementById('new-domain').value = '';
   loadBlockedDomains();
 }
@@ -514,44 +439,37 @@ async function unblockDomain(domain) {
 async function loadAlerts() {
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId)
-    .collection('alerts').orderBy('timestamp', 'desc').limit(50).get();
-
+    .collection('alerts').orderBy('timestamp','desc').limit(50).get();
   const el = document.getElementById('alerts-list');
-  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">कोणतेही alerts नाहीत 🎉</p>'; return; }
-
+  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">No alerts 🎉</p>'; return; }
   el.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Message</th></tr></thead><tbody>' +
     snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleString('en-IN') || '--';
-      const typeIcon = d.type === 'sos' ? '🆘' : d.type === 'geofence' ? '📍' : '⚠️';
-      return `<tr>
-        <td style="color:var(--muted);font-size:12px">${time}</td>
-        <td>${typeIcon} ${d.type}</td>
-        <td>${d.message}</td>
-      </tr>`;
+      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type}</td><td>${d.message}</td></tr>`;
     }).join('') + '</tbody></table>';
 }
 
 function loadLocation() {
-  if (!currentChildId || !currentParentId) return;
+  if (!currentChildId||!currentParentId) return;
   db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId)
     .onSnapshot(doc => {
       const data = doc.data();
       if (data?.location) {
         document.getElementById('location-coords').textContent =
-          `📍 ${data.locationName || ''} (${data.location.lat?.toFixed(4)}, ${data.location.lng?.toFixed(4)})`;
+          `📍 ${data.locationName||''} (${data.location.lat?.toFixed(4)}, ${data.location.lng?.toFixed(4)})`;
         document.getElementById('location-updated').textContent =
-          'Updated: ' + new Date(data.locationUpdatedAt?.seconds * 1000).toLocaleTimeString('en-IN');
+          'Updated: ' + new Date(data.locationUpdatedAt?.seconds*1000).toLocaleTimeString('en-IN');
       }
     });
 }
 
 async function downloadReport() {
-  window.open(`${BACKEND_URL}/reports/pdf/${currentChildId}?token=${await auth.currentUser.getIdToken()}`, '_blank');
+  const token = await auth.currentUser.getIdToken();
+  window.open(`${BACKEND_URL}/reports/pdf/${currentChildId}?token=${token}`, '_blank');
 }
 
-// Real-time stats update
 setInterval(loadLiveStats, 30000);
 </script>
 </body>
