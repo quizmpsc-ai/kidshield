@@ -592,40 +592,54 @@ function doLogout() {
 // CHILDREN
 // ============================
 async function loadChildren() {
-  const snap = await db.collection('families').doc(currentParentId).collection('children').get();
   const tabsEl = document.getElementById('children-tabs');
   tabsEl.innerHTML = '';
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').get();
 
-  if (snap.empty) {
-    const msg = document.createElement('p');
-    msg.style.cssText = 'color:var(--muted);font-size:13px;padding:4px 0';
-    msg.textContent = 'No children added yet. Click + Add Child to start.';
-    tabsEl.appendChild(msg);
-  } else {
     let firstChild = null;
     snap.forEach(doc => {
       const child = { id: doc.id, ...doc.data() };
       if (!firstChild) firstChild = child;
       const tab = document.createElement('div');
-      tab.className = 'child-tab' + (currentChildId === child.id ? ' active' : '');
-      // FIX: Use actual emoji string from Firestore, not HTML entity
+      const isActive = currentChildId === child.id;
+      tab.className = 'child-tab' + (isActive ? ' active' : '');
+      // Use innerHTML so emoji entities render correctly
+      const emojiMap = {'&#128102;':'&#128102;','&#128103;':'&#128103;','&#128118;':'&#128118;','&#128116;':'&#128116;','&#129489;':'&#129489;'};
       const emoji = child.emoji || '&#128102;';
-      tab.textContent = emoji + ' ' + child.name;
+      tab.innerHTML = emoji + ' ' + child.name;
       tab.dataset.childId = child.id;
       tab.onclick = () => selectChild(child.id, tab);
       tabsEl.appendChild(tab);
     });
+
     if (!currentChildId && firstChild) {
       currentChildId = firstChild.id;
       const firstTab = tabsEl.querySelector('.child-tab');
       if (firstTab) firstTab.classList.add('active');
       loadChildData();
+    } else if (!firstChild) {
+      // No children yet - show message
+      const msg = document.createElement('span');
+      msg.style.cssText = 'color:var(--muted);font-size:13px;padding:4px 8px;';
+      msg.textContent = 'No children yet &#8212;';
+      tabsEl.appendChild(msg);
+      // Still show activity placeholder
+      document.getElementById('activity-list').innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center">Add a child device to start monitoring.</p>';
     }
+  } catch (err) {
+    console.error('loadChildren error:', err);
+    const errMsg = document.createElement('span');
+    errMsg.style.cssText = 'color:var(--danger);font-size:13px;padding:4px 8px;';
+    errMsg.textContent = 'Error loading children: ' + err.message;
+    tabsEl.appendChild(errMsg);
+    document.getElementById('activity-list').innerHTML = '<p style="color:var(--danger);padding:20px">Failed to load. Check Firestore rules.</p>';
   }
 
+  // Always show + Add Child button
   const addBtn = document.createElement('div');
   addBtn.className = 'child-tab child-tab-add';
-  addBtn.textContent = '+ Add Child';
+  addBtn.innerHTML = '+ Add Child';
   addBtn.onclick = () => openAddChildModal();
   tabsEl.appendChild(addBtn);
 }
@@ -656,51 +670,45 @@ function handleModalOutsideClick(e) {
 async function generatePairingCode() {
   const name = document.getElementById('child-name').value.trim();
   const age = document.getElementById('child-age').value.trim();
-  const emoji = document.getElementById('child-emoji').value || '&#128102;';  // FIX: actual emoji
-
+  const emojiVal = document.getElementById('child-emoji').value || '&#128102;';
   if (!name) { alert('Please enter child name'); return; }
-
+  const btn = document.querySelector('#modal-step-1 .btn-primary');
+  if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
   const code = Math.random().toString(36).substr(2, 6).toUpperCase();
   const childId = 'child_' + Date.now();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
   try {
     await db.collection('families').doc(currentParentId).collection('children').doc(childId).set({
-      name,
-      age: parseInt(age) || 0,
-      emoji,  // FIX: stored as actual emoji character
-      pairingCode: code,
-      paired: false,
-      deviceOnline: false,
-      todayMinutes: 0,
-      blockedAttempts: 0,
-      battery: null,
+      name, age: parseInt(age) || 0, emoji: emojiVal,
+      pairingCode: code, paired: false, deviceOnline: false,
+      todayMinutes: 0, blockedAttempts: 0, battery: null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-
     await db.collection('pairing_codes').doc(code).set({
-      parentId: currentParentId,
-      childId,
+      parentId: currentParentId, childId,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      expiresAt
+      expiresAt: new Date(Date.now() + 24*60*60*1000)
     });
-
     document.getElementById('pairing-code-text').textContent = code;
     document.getElementById('modal-step-1').style.display = 'none';
     document.getElementById('modal-step-2').style.display = 'block';
-
-    // FIX: Store unsubscribe so we can clean up on modal close
+    // Reload tabs so new child appears immediately
+    await loadChildren();
+    currentChildId = childId;
+    document.querySelectorAll('.child-tab').forEach(t => {
+      if (t.dataset && t.dataset.childId === childId) t.classList.add('active');
+      else t.classList.remove('active');
+    });
     if (pairingUnsubscribe) pairingUnsubscribe();
     pairingUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(childId)
       .onSnapshot(doc => {
         if (doc.data()?.paired) {
           document.getElementById('pairing-status').innerHTML =
             '<span style="color:var(--success)">&#9989; Device Connected! ' + name + ' is now monitored.</span>';
-          loadChildren();
         }
       });
   } catch (err) {
     alert('Error: ' + err.message);
+    if (btn) { btn.textContent = 'Generate Pairing Code'; btn.disabled = false; }
   }
 }
 
