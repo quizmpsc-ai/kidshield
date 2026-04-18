@@ -131,6 +131,7 @@
       <input type="password" id="login-password" placeholder="Password" />
     </div>
     <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="doLogin()">Login करा</button>
+    <p style="text-align:center;margin-top:16px;font-size:14px;color:#aaa">New user? <a href="#" onclick="doRegister()" style="color:#00d4ff;text-decoration:none;font-weight:bold">Register करा</a></p>
     <p id="login-error" style="color:var(--danger);font-size:13px;margin-top:12px;text-align:center;display:none"></p>
   </div>
 </div>
@@ -311,7 +312,23 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-async function doLogin() {
+async function doRegister() {
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  if (!email || !password) { 
+    document.getElementById("login-error").style.display="block";
+    document.getElementById("login-error").textContent="Email आणि Password टाका";
+    return; 
+  }
+  firebase.auth().createUserWithEmailAndPassword(email, password)
+    .then(() => { showApp(); })
+    .catch(e => { 
+      document.getElementById("login-error").style.display="block";
+      document.getElementById("login-error").textContent=e.message; 
+    });
+}
+
+function doLogin() {
   const email = document.getElementById('login-email').value;
   const pass = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
