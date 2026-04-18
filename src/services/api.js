@@ -5,7 +5,7 @@ import axios from 'axios';
 import auth from '@react-native-firebase/auth';
 
 // Base URL from environment
-const BASE_URL = process.env.API_URL || 'https://your-backend.railway.app';
+const BASE_URL = process.env.API_URL || 'https://kidshield-0757.onrender.com';
 
 // Create axios instance
 const api = axios.create({
@@ -34,7 +34,7 @@ api.interceptors.response.use(
       const msg = error.response.data?.message || 'Server error';
       throw new Error(msg);
     } else if (error.request) {
-      throw new Error('Network error - internet connection check करा');
+      throw new Error('Network error - internet connection check à¤•à¤°à¤¾');
     }
     throw error;
   }
@@ -189,41 +189,14 @@ export const removeChild = async (childId) => {
 // ==================== WEBSOCKET (Real-time) ====================
 // Use this for real-time location updates
 
-let socket = null;
-
+// Real-time via Firebase Firestore (no socket.io needed)
 export const connectSocket = async (parentId) => {
-  const { io } = await import('socket.io-client');
-  const user = auth().currentUser;
-  const token = await user?.getIdToken();
-
-  socket = io(BASE_URL, {
-    auth: { token },
-    transports: ['websocket'],
-  });
-
-  socket.on('connect', () => {
-    console.log('Socket connected');
-    socket.emit('join-room', { parentId });
-  });
-
-  socket.on('disconnect', () => console.log('Socket disconnected'));
-
-  return socket;
+  console.log('Real-time via Firebase Firestore');
+  return null;
 };
-
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
-};
-
-export const onLocationUpdate = (callback) => {
-  if (socket) socket.on('location-update', callback);
-};
-
-export const onAlertReceived = (callback) => {
-  if (socket) socket.on('alert', callback);
-};
+export const disconnectSocket = () => {};
+export const onLocationUpdate = (callback) => {};
+export const onAlertReceived = (callback) => {};
 
 export default api;
+

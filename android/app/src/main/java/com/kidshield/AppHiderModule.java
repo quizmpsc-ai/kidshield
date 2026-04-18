@@ -1,4 +1,4 @@
-﻿package com.kidshield;
+package com.kidshield;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;

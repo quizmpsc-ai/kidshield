@@ -1,4 +1,4 @@
-﻿package com.kidshield;
+package com.kidshield;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -15,7 +15,6 @@ public class SecretCodeReceiver extends BroadcastReceiver {
             Intent launch = context.getPackageManager().getLaunchIntentForPackage("com.kidshield");
             if (launch != null) {
                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                launch.putExtra("from_secret_code", true);
                 context.startActivity(launch);
             }
         }

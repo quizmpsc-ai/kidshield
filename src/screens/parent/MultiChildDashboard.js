@@ -1,6 +1,6 @@
-// KidShield — MultiChildDashboard.js (Session 5)
-// Multiple Children Support — Parent Dashboard
-// प्रत्येक मुलाचे individual stats + controls
+// KidShield â€” MultiChildDashboard.js (Session 5)
+// Multiple Children Support â€” Parent Dashboard
+// à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤®à¥à¤²à¤¾à¤šà¥‡ individual stats + controls
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -19,7 +19,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import api from '../services/api';
+import api from '../../services/api';
 
 // Theme
 const COLORS = {
@@ -35,9 +35,9 @@ const COLORS = {
   border: '#1e3a5f',
 };
 
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // CHILD CARD COMPONENT
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const ChildCard = ({ child, isActive, onPress, onLongPress }) => {
   const statusColor =
     child.status === 'online'
@@ -63,7 +63,7 @@ const ChildCard = ({ child, isActive, onPress, onLongPress }) => {
         {child.photoURL ? (
           <Image source={{ uri: child.photoURL }} style={styles.avatar} />
         ) : (
-          <Text style={styles.avatarEmoji}>{child.emoji || '👦'}</Text>
+          <Text style={styles.avatarEmoji}>{child.emoji || 'ðŸ‘¦'}</Text>
         )}
         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
       </View>
@@ -72,7 +72,7 @@ const ChildCard = ({ child, isActive, onPress, onLongPress }) => {
       <Text style={styles.childName} numberOfLines={1}>
         {child.name}
       </Text>
-      <Text style={styles.childAge}>{child.age ? `${child.age} वर्षे` : ''}</Text>
+      <Text style={styles.childAge}>{child.age ? `${child.age} à¤µà¤°à¥à¤·à¥‡` : ''}</Text>
 
       {/* Usage bar */}
       <View style={styles.usageBar}>
@@ -91,38 +91,38 @@ const ChildCard = ({ child, isActive, onPress, onLongPress }) => {
           ]}
         />
       </View>
-      <Text style={styles.usageText}>{child.todayMinutes || 0}m आज</Text>
+      <Text style={styles.usageText}>{child.todayMinutes || 0}m à¤†à¤œ</Text>
     </TouchableOpacity>
   );
 };
 
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // CHILD STATS PANEL
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const ChildStatsPanel = ({ child, onNavigate }) => {
   if (!child) return null;
 
   const stats = [
     {
-      icon: '📱',
+      icon: 'ðŸ“±',
       label: 'Screen Time',
       value: `${Math.floor((child.todayMinutes || 0) / 60)}h ${(child.todayMinutes || 0) % 60}m`,
       color: COLORS.accent,
     },
     {
-      icon: '🚫',
+      icon: 'ðŸš«',
       label: 'Blocked Attempts',
       value: child.blockedAttempts || 0,
       color: COLORS.danger,
     },
     {
-      icon: '📍',
+      icon: 'ðŸ“',
       label: 'Location',
       value: child.locationName || 'Unknown',
       color: COLORS.success,
     },
     {
-      icon: '🔋',
+      icon: 'ðŸ”‹',
       label: 'Battery',
       value: `${child.battery || '--'}%`,
       color: child.battery < 20 ? COLORS.danger : COLORS.warning,
@@ -130,17 +130,17 @@ const ChildStatsPanel = ({ child, onNavigate }) => {
   ];
 
   const quickActions = [
-    { icon: '📍', label: 'Location', screen: 'LocationTracker', params: { childId: child.id } },
-    { icon: '🚫', label: 'Apps', screen: 'AppControl', params: { childId: child.id } },
-    { icon: '📊', label: 'Reports', screen: 'Reports', params: { childId: child.id } },
-    { icon: '⚙️', label: 'Settings', screen: 'ChildSettings', params: { childId: child.id } },
+    { icon: 'ðŸ“', label: 'Location', screen: 'LocationTracker', params: { childId: child.id } },
+    { icon: 'ðŸš«', label: 'Apps', screen: 'AppControl', params: { childId: child.id } },
+    { icon: 'ðŸ“Š', label: 'Reports', screen: 'Reports', params: { childId: child.id } },
+    { icon: 'âš™ï¸', label: 'Settings', screen: 'ChildSettings', params: { childId: child.id } },
   ];
 
   return (
     <View style={styles.statsPanel}>
       {/* Child Header */}
       <View style={styles.statsPanelHeader}>
-        <Text style={styles.statsPanelName}>{child.name} चे Stats</Text>
+        <Text style={styles.statsPanelName}>{child.name} à¤šà¥‡ Stats</Text>
         <View
           style={[
             styles.statusBadge,
@@ -156,7 +156,7 @@ const ChildStatsPanel = ({ child, onNavigate }) => {
               { color: child.status === 'online' ? COLORS.success : COLORS.danger },
             ]}
           >
-            {child.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+            {child.status === 'online' ? 'ðŸŸ¢ Online' : 'ðŸ”´ Offline'}
           </Text>
         </View>
       </View>
@@ -196,7 +196,7 @@ const ChildStatsPanel = ({ child, onNavigate }) => {
           {child.recentAlerts.slice(0, 3).map((alert, i) => (
             <View key={i} style={styles.alertRow}>
               <Text style={styles.alertIcon}>
-                {alert.type === 'sos' ? '🆘' : alert.type === 'geofence' ? '📍' : '⚠️'}
+                {alert.type === 'sos' ? 'ðŸ†˜' : alert.type === 'geofence' ? 'ðŸ“' : 'âš ï¸'}
               </Text>
               <Text style={styles.alertText}>{alert.message}</Text>
               <Text style={styles.alertTime}>{alert.time}</Text>
@@ -208,20 +208,20 @@ const ChildStatsPanel = ({ child, onNavigate }) => {
   );
 };
 
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ADD CHILD MODAL
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const AddChildModal = ({ visible, onClose, onAdd }) => {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
-  const [emoji, setEmoji] = useState('👦');
+  const [emoji, setEmoji] = useState('ðŸ‘¦');
   const [loading, setLoading] = useState(false);
 
-  const emojis = ['👦', '👧', '🧒', '👶', '🧑'];
+  const emojis = ['ðŸ‘¦', 'ðŸ‘§', 'ðŸ§’', 'ðŸ‘¶', 'ðŸ§‘'];
 
   const handleAdd = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'मुलाचे नाव टाका');
+      Alert.alert('Error', 'à¤®à¥à¤²à¤¾à¤šà¥‡ à¤¨à¤¾à¤µ à¤Ÿà¤¾à¤•à¤¾');
       return;
     }
     setLoading(true);
@@ -236,7 +236,7 @@ const AddChildModal = ({ visible, onClose, onAdd }) => {
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalOverlay}>
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>नवीन मुलाचे Account</Text>
+          <Text style={styles.modalTitle}>à¤¨à¤µà¥€à¤¨ à¤®à¥à¤²à¤¾à¤šà¥‡ Account</Text>
 
           {/* Emoji Picker */}
           <View style={styles.emojiRow}>
@@ -253,14 +253,14 @@ const AddChildModal = ({ visible, onClose, onAdd }) => {
 
           <TextInput
             style={styles.input}
-            placeholder="मुलाचे नाव"
+            placeholder="à¤®à¥à¤²à¤¾à¤šà¥‡ à¤¨à¤¾à¤µ"
             placeholderTextColor={COLORS.textMuted}
             value={name}
             onChangeText={setName}
           />
           <TextInput
             style={styles.input}
-            placeholder="वय (optional)"
+            placeholder="à¤µà¤¯ (optional)"
             placeholderTextColor={COLORS.textMuted}
             value={age}
             onChangeText={setAge}
@@ -279,7 +279,7 @@ const AddChildModal = ({ visible, onClose, onAdd }) => {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.confirmBtnText}>Add करा</Text>
+                <Text style={styles.confirmBtnText}>Add à¤•à¤°à¤¾</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -289,9 +289,9 @@ const AddChildModal = ({ visible, onClose, onAdd }) => {
   );
 };
 
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAIN SCREEN
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 export default function MultiChildDashboard({ navigation }) {
   const [children, setChildren] = useState([]);
   const [activeChildId, setActiveChildId] = useState(null);
@@ -348,14 +348,14 @@ export default function MultiChildDashboard({ navigation }) {
         child: childData,
       });
     } catch (e) {
-      Alert.alert('Error', 'Child add करताना error आला');
+      Alert.alert('Error', 'Child add à¤•à¤°à¤¤à¤¾à¤¨à¤¾ error à¤†à¤²à¤¾');
     }
   };
 
   const removeChild = (child) => {
     Alert.alert(
-      `${child.name} चे Account Delete करायचे?`,
-      'सगळा data permanently delete होईल.',
+      `${child.name} à¤šà¥‡ Account Delete à¤•à¤°à¤¾à¤¯à¤šà¥‡?`,
+      'à¤¸à¤—à¤³à¤¾ data permanently delete à¤¹à¥‹à¤ˆà¤².',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -365,7 +365,7 @@ export default function MultiChildDashboard({ navigation }) {
             try {
               await api.delete(`/family/child/${child.id}`);
             } catch (e) {
-              Alert.alert('Error', 'Delete करताना error आला');
+              Alert.alert('Error', 'Delete à¤•à¤°à¤¤à¤¾à¤¨à¤¾ error à¤†à¤²à¤¾');
             }
           },
         },
@@ -388,7 +388,7 @@ export default function MultiChildDashboard({ navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>🛡️ KidShield</Text>
+        <Text style={styles.headerTitle}>ðŸ›¡ï¸ KidShield</Text>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => setShowAddModal(true)}
@@ -400,16 +400,16 @@ export default function MultiChildDashboard({ navigation }) {
       {/* No children state */}
       {children.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>👨‍👧‍👦</Text>
-          <Text style={styles.emptyTitle}>कोणतेही मूल नाही</Text>
+          <Text style={styles.emptyIcon}>ðŸ‘¨â€ðŸ‘§â€ðŸ‘¦</Text>
+          <Text style={styles.emptyTitle}>à¤•à¥‹à¤£à¤¤à¥‡à¤¹à¥€ à¤®à¥‚à¤² à¤¨à¤¾à¤¹à¥€</Text>
           <Text style={styles.emptySubtitle}>
-            "+ Child" button दाबून मुलाचे account बनवा
+            "+ Child" button à¤¦à¤¾à¤¬à¥‚à¤¨ à¤®à¥à¤²à¤¾à¤šà¥‡ account à¤¬à¤¨à¤µà¤¾
           </Text>
           <TouchableOpacity
             style={styles.emptyAddBtn}
             onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.emptyAddBtnText}>पहिले मूल Add करा</Text>
+            <Text style={styles.emptyAddBtnText}>à¤ªà¤¹à¤¿à¤²à¥‡ à¤®à¥‚à¤² Add à¤•à¤°à¤¾</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -458,9 +458,9 @@ export default function MultiChildDashboard({ navigation }) {
   );
 }
 
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // STYLES
-// ══════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   loadingContainer: { flex: 1, backgroundColor: COLORS.bg, justifyContent: 'center', alignItems: 'center' },

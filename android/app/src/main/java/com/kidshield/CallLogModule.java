@@ -8,6 +8,7 @@ import android.Manifest;
 import android.content.ContentResolver;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.net.Uri;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 
