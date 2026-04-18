@@ -21,25 +21,28 @@
     .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 4px; }
     .login-sub { color: var(--muted); text-align: center; margin-bottom: 32px; font-size: 14px; }
     #app { display: none; }
-    .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; }
+    .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; display: flex; flex-direction: column; }
     .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
     .sidebar-logo-text { font-size: 18px; font-weight: 900; }
-    .sidebar-logo-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .sidebar-logo-sub { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; transition: all 0.15s; border-left: 3px solid transparent; }
     .nav-item:hover { background: rgba(0,212,255,0.05); color: var(--text); }
     .nav-item.active { background: rgba(0,212,255,0.1); color: var(--accent); border-left-color: var(--accent); }
     .nav-icon { font-size: 18px; }
+    .nav-logout { margin-top: auto; color: var(--danger) !important; }
     .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
-    .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+    .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .child-tab { background: var(--card); border: 2px solid transparent; border-radius: 40px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
     .child-tab.active { border-color: var(--accent); color: var(--accent); }
+    .child-tab-add { border-style: dashed !important; border-color: var(--border) !important; }
+    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
     .stat-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); }
     .stat-icon { font-size: 28px; margin-bottom: 12px; }
     .stat-val { font-size: 28px; font-weight: 900; }
     .stat-lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
     .section { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
-    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
     .section-title { font-size: 16px; font-weight: 700; }
     table { width: 100%; border-collapse: collapse; }
     th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -64,11 +67,37 @@
     .btn:hover { opacity: 0.85; }
     .btn-primary { background: var(--accent); color: var(--bg); }
     .btn-danger { background: var(--danger); color: white; }
+    .btn-success { background: var(--success); color: white; }
     .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
     .map-placeholder { background: #0d1a2d; border-radius: 12px; height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); border: 1px dashed var(--border); }
     .loader { display: flex; justify-content: center; padding: 40px; }
     .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; justify-content: center; align-items: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 420px; border: 1px solid var(--border); }
+    .modal-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .pairing-code-display { background: #0d1a2d; border: 2px dashed var(--accent); border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; }
+    .pairing-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: var(--accent); }
+    .pairing-sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    /* LIVE FEATURES */
+    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .live-card { background: #0d1a2d; border-radius: 16px; padding: 20px; border: 1px solid var(--border); text-align: center; cursor: pointer; transition: all 0.2s; }
+    .live-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .live-card.active { border-color: var(--success); background: rgba(34,197,94,0.05); }
+    .live-icon { font-size: 40px; margin-bottom: 12px; }
+    .live-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .live-status { font-size: 12px; color: var(--muted); }
+    .live-status.on { color: var(--success); }
+    .stream-area { background: #000; border-radius: 12px; min-height: 300px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; margin-top: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stream-area img, .stream-area video { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
+
     @media (max-width: 768px) {
       .sidebar { width: 60px; }
       .sidebar-logo-text, .nav-label, .sidebar-logo-sub { display: none; }
@@ -78,11 +107,12 @@
 </head>
 <body>
 
+<!-- LOGIN PAGE -->
 <div id="login-page">
   <div class="login-card">
-    <div class="login-logo">🛡️</div>
+    <div class="login-logo">&#x1F6E1;&#xFE0F;</div>
     <h1 class="login-title">KidShield</h1>
-    <p class="login-sub">Web Admin Dashboard — Parent Login</p>
+    <p class="login-sub">Web Admin Dashboard &#x2014; Parent Login</p>
     <div style="margin-bottom:14px">
       <input type="email" id="login-email" placeholder="Email address" />
     </div>
@@ -95,85 +125,169 @@
   </div>
 </div>
 
+<!-- ADD CHILD MODAL -->
+<div class="modal-overlay" id="modal-add-child">
+  <div class="modal">
+    <div class="modal-title">&#x1F476; Add Child Device</div>
+    <div id="modal-step-1">
+      <div class="modal-field">
+        <label>Child's Name</label>
+        <input type="text" id="child-name" placeholder="e.g. Arjun" />
+      </div>
+      <div class="modal-field">
+        <label>Age</label>
+        <input type="number" id="child-age" placeholder="e.g. 10" min="1" max="17" />
+      </div>
+      <div class="modal-field">
+        <label>Emoji (optional)</label>
+        <input type="text" id="child-emoji" placeholder="e.g. &#x1F466; &#x1F467; &#x1F476;" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="generatePairingCode()">Generate Pairing Code</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+    <div id="modal-step-2" style="display:none">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Share this code with your child's Android device:</p>
+      <div class="pairing-code-display">
+        <div class="pairing-code" id="pairing-code-text">------</div>
+        <div class="pairing-sub">Enter this code in KidShield app on child's phone</div>
+      </div>
+      <div style="background:#0d1a2d;border-radius:10px;padding:14px;margin-bottom:16px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:6px">Steps for child's phone:</p>
+        <p style="font-size:13px;">1. Open KidShield app</p>
+        <p style="font-size:13px;">2. Tap "Enter Pairing Code"</p>
+        <p style="font-size:13px;">3. Enter the code above</p>
+        <p style="font-size:13px;">4. Enable 5 permissions</p>
+      </div>
+      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:10px">
+        &#x23F3; Waiting for child device to connect...
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
 <div id="app">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="sidebar-logo-text">🛡️ KidShield</div>
+      <div class="sidebar-logo-text">&#x1F6E1;&#xFE0F; KidShield</div>
       <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
     </div>
-    <nav>
+    <nav style="flex:1;display:flex;flex-direction:column;">
       <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
-        <span class="nav-icon">🏠</span><span class="nav-label">Overview</span>
+        <span class="nav-icon">&#x1F3E0;</span><span class="nav-label">Overview</span>
       </div>
       <div class="nav-item" onclick="showSection('location')" id="nav-location">
-        <span class="nav-icon">📍</span><span class="nav-label">Location</span>
+        <span class="nav-icon">&#x1F4CD;</span><span class="nav-label">Location</span>
+      </div>
+      <div class="nav-item" onclick="showSection('live')" id="nav-live">
+        <span class="nav-icon">&#x1F4F9;</span><span class="nav-label">Live Monitor</span>
       </div>
       <div class="nav-item" onclick="showSection('apps')" id="nav-apps">
-        <span class="nav-icon">📱</span><span class="nav-label">App Control</span>
+        <span class="nav-icon">&#x1F4F1;</span><span class="nav-label">App Control</span>
       </div>
       <div class="nav-item" onclick="showSection('filter')" id="nav-filter">
-        <span class="nav-icon">🔒</span><span class="nav-label">Web Filter</span>
+        <span class="nav-icon">&#x1F512;</span><span class="nav-label">Web Filter</span>
       </div>
       <div class="nav-item" onclick="showSection('reports')" id="nav-reports">
-        <span class="nav-icon">📊</span><span class="nav-label">Reports</span>
+        <span class="nav-icon">&#x1F4CA;</span><span class="nav-label">Reports</span>
       </div>
       <div class="nav-item" onclick="showSection('alerts')" id="nav-alerts">
-        <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span>
+        <span class="nav-icon">&#x1F514;</span><span class="nav-label">Alerts</span>
       </div>
-      <div class="nav-item" style="margin-top:auto;color:var(--danger)" onclick="doLogout()">
-        <span class="nav-icon">🚪</span><span class="nav-label">Logout</span>
+      <div class="nav-item nav-logout" onclick="doLogout()">
+        <span class="nav-icon">&#x1F6AA;</span><span class="nav-label">Logout</span>
       </div>
     </nav>
   </aside>
 
   <main class="main">
+    <!-- Children Tabs -->
     <div class="children-tabs" id="children-tabs">
       <div class="loader"><div class="spinner"></div></div>
     </div>
 
+    <!-- OVERVIEW -->
     <div id="section-overview">
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-icon">⏱️</div><div class="stat-val" id="stat-screentime">--</div><div class="stat-lbl">Screen Time Today</div></div>
-        <div class="stat-card"><div class="stat-icon">🚫</div><div class="stat-val" id="stat-blocked">--</div><div class="stat-lbl">Blocked Attempts</div></div>
-        <div class="stat-card"><div class="stat-icon">🔋</div><div class="stat-val" id="stat-battery">--%</div><div class="stat-lbl">Battery Level</div></div>
-        <div class="stat-card"><div class="stat-icon">📍</div><div class="stat-val" id="stat-location">--</div><div class="stat-lbl">Current Location</div></div>
+        <div class="stat-card"><div class="stat-icon">&#x23F1;&#xFE0F;</div><div class="stat-val" id="stat-screentime">--</div><div class="stat-lbl">Screen Time Today</div></div>
+        <div class="stat-card"><div class="stat-icon">&#x1F6AB;</div><div class="stat-val" id="stat-blocked">--</div><div class="stat-lbl">Blocked Attempts</div></div>
+        <div class="stat-card"><div class="stat-icon">&#x1F50B;</div><div class="stat-val" id="stat-battery">--%</div><div class="stat-lbl">Battery Level</div></div>
+        <div class="stat-card"><div class="stat-icon">&#x1F4CD;</div><div class="stat-val" id="stat-location">--</div><div class="stat-lbl">Current Location</div></div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">🕐 Recent Activity</h3>
+          <h3 class="section-title">&#x1F550; Recent Activity</h3>
           <button class="btn btn-ghost" onclick="loadActivity()">Refresh</button>
         </div>
         <div id="activity-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
     </div>
 
+    <!-- LOCATION -->
     <div id="section-location" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">📍 Real-time Location</h3>
+          <h3 class="section-title">&#x1F4CD; Real-time Location</h3>
           <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
         </div>
         <div class="map-placeholder" id="map-area">
-          <span style="font-size:48px">🗺️</span>
+          <span style="font-size:48px">&#x1F5FA;&#xFE0F;</span>
           <p>Location will show here</p>
           <p id="location-coords" style="font-size:13px;color:var(--accent)">Loading...</p>
         </div>
       </div>
     </div>
 
+    <!-- LIVE MONITOR -->
+    <div id="section-live" style="display:none">
+      <div class="live-grid">
+        <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
+          <div class="live-icon">&#x1F4BB;</div>
+          <div class="live-title">Screen Mirror</div>
+          <div class="live-status" id="status-screen">Click to start</div>
+        </div>
+        <div class="live-card" id="card-camera" onclick="toggleLive('camera')">
+          <div class="live-icon">&#x1F4F7;</div>
+          <div class="live-title">Remote Camera</div>
+          <div class="live-status" id="status-camera">Click to start</div>
+        </div>
+        <div class="live-card" id="card-audio" onclick="toggleLive('audio')">
+          <div class="live-icon">&#x1F3A4;</div>
+          <div class="live-title">Ambient Audio</div>
+          <div class="live-status" id="status-audio">Click to start</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title" id="live-section-title">&#x1F4F9; Live Feed</h3>
+          <button class="btn btn-danger" onclick="stopAllLive()" id="btn-stop-live" style="display:none">Stop</button>
+        </div>
+        <div class="stream-area" id="stream-area">
+          <p>Select a feature above to start monitoring</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPS -->
     <div id="section-apps" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">📱 Installed Apps</h3>
+          <h3 class="section-title">&#x1F4F1; Installed Apps</h3>
           <input type="text" placeholder="Search apps..." style="width:200px" oninput="filterApps(this.value)" />
         </div>
         <div id="apps-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
     </div>
 
+    <!-- FILTER -->
     <div id="section-filter" style="display:none">
       <div class="section">
-        <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
+        <div class="section-header"><h3 class="section-title">&#x1F512; Website Filter</h3></div>
         <div style="margin-bottom:20px">
           <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px">CATEGORY BLOCKS</h4>
           <div id="category-toggles">Loading...</div>
@@ -189,20 +303,22 @@
       </div>
     </div>
 
+    <!-- REPORTS -->
     <div id="section-reports" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">📊 Weekly Report</h3>
-          <button class="btn btn-primary" onclick="downloadReport()">📄 PDF Download</button>
+          <h3 class="section-title">&#x1F4CA; Weekly Report</h3>
+          <button class="btn btn-primary" onclick="downloadReport()">&#x1F4C4; PDF Download</button>
         </div>
         <div id="top-apps-list">Loading...</div>
       </div>
     </div>
 
+    <!-- ALERTS -->
     <div id="section-alerts" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">🔔 All Alerts</h3>
+          <h3 class="section-title">&#x1F514; All Alerts</h3>
           <button class="btn btn-ghost" onclick="loadAlerts()">Refresh</button>
         </div>
         <div id="alerts-list"><div class="loader"><div class="spinner"></div></div></div>
@@ -219,8 +335,7 @@ const firebaseConfig = {
   projectId: "kidshield-8744e",
   storageBucket: "kidshield-8744e.firebasestorage.app",
   messagingSenderId: "966097917754",
-  appId: "1:966097917754:web:67c2cca3cc78ad77cf6203",
-  measurementId: "G-ETHL80VHTS"
+  appId: "1:966097917754:web:67c2cca3cc78ad77cf6203"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -230,8 +345,11 @@ const db = firebase.firestore();
 let currentParentId = null;
 let currentChildId = null;
 let allApps = [];
+let liveUnsubscribe = null;
+let currentLiveMode = null;
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
 
+// AUTH
 auth.onAuthStateChanged(user => {
   if (user) {
     currentParentId = user.uid;
@@ -250,22 +368,10 @@ function doRegister() {
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  if (!email || !password) {
-    errEl.textContent = 'Please enter email and password';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (password.length < 6) {
-    errEl.textContent = 'Password must be at least 6 characters';
-    errEl.style.display = 'block';
-    return;
-  }
+  if (!email || !password) { errEl.textContent = 'Please enter email and password'; errEl.style.display = 'block'; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; errEl.style.display = 'block'; return; }
   firebase.auth().createUserWithEmailAndPassword(email, password)
-    .then(() => {})
-    .catch(e => {
-      errEl.textContent = e.message;
-      errEl.style.display = 'block';
-    });
+    .catch(e => { errEl.textContent = e.message; errEl.style.display = 'block'; });
 }
 
 function doLogin() {
@@ -273,42 +379,93 @@ function doLogin() {
   const pass = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  if (!email || !pass) {
-    errEl.textContent = 'Please enter email and password';
-    errEl.style.display = 'block';
-    return;
-  }
+  if (!email || !pass) { errEl.textContent = 'Please enter email and password'; errEl.style.display = 'block'; return; }
   firebase.auth().signInWithEmailAndPassword(email, pass)
-    .catch(e => {
-      errEl.textContent = 'Login failed: ' + e.message;
-      errEl.style.display = 'block';
-    });
+    .catch(e => { errEl.textContent = 'Login failed: ' + e.message; errEl.style.display = 'block'; });
 }
 
 function doLogout() { auth.signOut(); }
 
+// CHILDREN
 async function loadChildren() {
   const snap = await db.collection('families').doc(currentParentId).collection('children').get();
   const tabsEl = document.getElementById('children-tabs');
   tabsEl.innerHTML = '';
-  snap.forEach(doc => {
-    const child = { id: doc.id, ...doc.data() };
-    const tab = document.createElement('div');
-    tab.className = 'child-tab' + (currentChildId === child.id ? ' active' : '');
-    tab.textContent = (child.emoji || '👦') + ' ' + child.name;
-    tab.onclick = () => selectChild(child.id, tab);
-    tabsEl.appendChild(tab);
-    if (!currentChildId) {
-      currentChildId = child.id;
-      tab.classList.add('active');
-      loadChildData();
-    }
-  });
+
+  if (snap.empty) {
+    tabsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:4px 0">No children added yet.</p>';
+  } else {
+    snap.forEach(doc => {
+      const child = { id: doc.id, ...doc.data() };
+      const tab = document.createElement('div');
+      tab.className = 'child-tab' + (currentChildId === child.id ? ' active' : '');
+      tab.textContent = (child.emoji || '&#x1F466;') + ' ' + child.name;
+      tab.onclick = () => selectChild(child.id, tab);
+      tabsEl.appendChild(tab);
+      if (!currentChildId) {
+        currentChildId = child.id;
+        tab.classList.add('active');
+        loadChildData();
+      }
+    });
+  }
+
   const addBtn = document.createElement('div');
-  addBtn.className = 'child-tab';
+  addBtn.className = 'child-tab child-tab-add';
   addBtn.textContent = '+ Add Child';
-  addBtn.style.borderStyle = 'dashed';
+  addBtn.onclick = () => openAddChildModal();
   tabsEl.appendChild(addBtn);
+}
+
+function openAddChildModal() {
+  document.getElementById('modal-add-child').classList.add('open');
+  document.getElementById('modal-step-1').style.display = 'block';
+  document.getElementById('modal-step-2').style.display = 'none';
+  document.getElementById('child-name').value = '';
+  document.getElementById('child-age').value = '';
+  document.getElementById('child-emoji').value = '';
+}
+
+function closeModal() {
+  document.getElementById('modal-add-child').classList.remove('open');
+}
+
+async function generatePairingCode() {
+  const name = document.getElementById('child-name').value.trim();
+  const age = document.getElementById('child-age').value.trim();
+  const emoji = document.getElementById('child-emoji').value.trim() || '&#x1F466;';
+
+  if (!name) { alert('Please enter child name'); return; }
+
+  const code = Math.random().toString(36).substr(2, 6).toUpperCase();
+  const childId = 'child_' + Date.now();
+
+  await db.collection('families').doc(currentParentId).collection('children').doc(childId).set({
+    name, age: parseInt(age) || 0, emoji,
+    pairingCode: code,
+    paired: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  await db.collection('pairing_codes').doc(code).set({
+    parentId: currentParentId,
+    childId,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    expiresAt: new Date(Date.now() + 24*60*60*1000)
+  });
+
+  document.getElementById('pairing-code-text').textContent = code;
+  document.getElementById('modal-step-1').style.display = 'none';
+  document.getElementById('modal-step-2').style.display = 'block';
+
+  db.collection('families').doc(currentParentId).collection('children').doc(childId)
+    .onSnapshot(doc => {
+      if (doc.data()?.paired) {
+        document.getElementById('pairing-status').innerHTML =
+          '<span style="color:var(--success)">&#x2705; Device Connected! Child is now monitored.</span>';
+        loadChildren();
+      }
+    });
 }
 
 function selectChild(childId, tabEl) {
@@ -334,7 +491,7 @@ async function loadLiveStats() {
 
 async function loadActivity() {
   if (!currentChildId) {
-    document.getElementById('activity-list').innerHTML = '<p style="color:var(--muted);padding:20px">No child selected</p>';
+    document.getElementById('activity-list').innerHTML = '<p style="color:var(--muted);padding:20px">No child selected. Add a child first.</p>';
     return;
   }
   const snap = await db.collection('families').doc(currentParentId)
@@ -346,15 +503,69 @@ async function loadActivity() {
     snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleTimeString('en-IN') || '--';
-      return `<tr>
-        <td style="color:var(--muted)">${time}</td>
-        <td>${d.type||'--'}</td>
-        <td>${d.details||'--'}</td>
-        <td><span class="badge ${d.blocked?'badge-danger':'badge-success'}">${d.blocked?'Blocked':'Allowed'}</span></td>
-      </tr>`;
+      return '<tr><td style="color:var(--muted)">' + time + '</td><td>' + (d.type||'--') + '</td><td>' + (d.details||'--') + '</td><td><span class="badge ' + (d.blocked?'badge-danger':'badge-success') + '">' + (d.blocked?'Blocked':'Allowed') + '</span></td></tr>';
     }).join('') + '</tbody></table>';
 }
 
+// LIVE MONITOR
+async function toggleLive(mode) {
+  if (!currentChildId) { alert('Please select a child first'); return; }
+  if (currentLiveMode === mode) { stopAllLive(); return; }
+  stopAllLive();
+  currentLiveMode = mode;
+
+  document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('card-' + mode).classList.add('active');
+  document.getElementById('status-' + mode).textContent = 'Starting...';
+  document.getElementById('status-' + mode).className = 'live-status on';
+  document.getElementById('btn-stop-live').style.display = 'block';
+
+  const titles = { screen: '&#x1F4BB; Screen Mirror', camera: '&#x1F4F7; Remote Camera', audio: '&#x1F3A4; Ambient Audio' };
+  document.getElementById('live-section-title').innerHTML = titles[mode];
+
+  const streamArea = document.getElementById('stream-area');
+
+  await db.collection('families').doc(currentParentId)
+    .collection('children').doc(currentChildId)
+    .update({ liveCommand: mode, liveCommandAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+  if (mode === 'audio') {
+    streamArea.innerHTML = '<div style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:16px">&#x1F3A4;</div><p style="color:var(--accent)">Audio streaming active</p><div id="audio-level" style="width:200px;height:8px;background:#1e3a5f;border-radius:4px;margin:16px auto;overflow:hidden"><div id="audio-bar" style="height:100%;background:var(--success);width:0%;transition:width 0.1s;border-radius:4px"></div></div><p style="color:var(--muted);font-size:12px">Listening...</p></div>';
+  } else {
+    streamArea.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Waiting for device response...</p></div>';
+  }
+
+  liveUnsubscribe = db.collection('families').doc(currentParentId)
+    .collection('children').doc(currentChildId)
+    .onSnapshot(doc => {
+      const data = doc.data();
+      if (data?.liveFrame && currentLiveMode !== 'audio') {
+        streamArea.innerHTML = '<img src="' + data.liveFrame + '" style="width:100%;border-radius:12px" />';
+        document.getElementById('status-' + mode).textContent = 'Live';
+      }
+      if (data?.liveAudioLevel !== undefined && currentLiveMode === 'audio') {
+        const bar = document.getElementById('audio-bar');
+        if (bar) bar.style.width = Math.min(data.liveAudioLevel * 100, 100) + '%';
+        document.getElementById('status-audio').textContent = 'Live';
+      }
+    });
+}
+
+function stopAllLive() {
+  if (liveUnsubscribe) { liveUnsubscribe(); liveUnsubscribe = null; }
+  if (currentLiveMode && currentChildId) {
+    db.collection('families').doc(currentParentId)
+      .collection('children').doc(currentChildId)
+      .update({ liveCommand: 'stop' }).catch(() => {});
+  }
+  currentLiveMode = null;
+  document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.live-status').forEach(s => { s.textContent = 'Click to start'; s.className = 'live-status'; });
+  document.getElementById('btn-stop-live').style.display = 'none';
+  document.getElementById('stream-area').innerHTML = '<p>Select a feature above to start monitoring</p>';
+}
+
+// SECTIONS
 function showSection(name) {
   document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
   document.getElementById('section-' + name).style.display = 'block';
@@ -364,9 +575,11 @@ function showSection(name) {
   if (name === 'filter') loadFilter();
   if (name === 'alerts') loadAlerts();
   if (name === 'location') loadLocation();
+  if (name !== 'live') stopAllLive();
 }
 
 async function loadApps() {
+  if (!currentChildId) return;
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId).collection('installed_apps').get();
   allApps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -374,13 +587,10 @@ async function loadApps() {
 }
 
 function renderApps(apps) {
-  document.getElementById('apps-list').innerHTML = apps.length ? '<table><thead><tr><th>App</th><th>Today</th><th>Status</th><th>Block</th></tr></thead><tbody>' +
-    apps.map(app => `<tr>
-      <td>${app.appName||app.id}</td>
-      <td>${Math.floor((app.todayMinutes||0)/60)}h${(app.todayMinutes||0)%60}m</td>
-      <td><span class="badge ${app.blocked?'badge-danger':'badge-success'}">${app.blocked?'Blocked':'Allowed'}</span></td>
-      <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td>
-    </tr>`).join('') + '</tbody></table>' : '<p style="color:var(--muted);padding:20px">No apps found</p>';
+  document.getElementById('apps-list').innerHTML = apps.length ?
+    '<table><thead><tr><th>App</th><th>Today</th><th>Status</th><th>Block</th></tr></thead><tbody>' +
+    apps.map(app => '<tr><td>' + (app.appName||app.id) + '</td><td>' + Math.floor((app.todayMinutes||0)/60) + 'h' + (app.todayMinutes||0)%60 + 'm</td><td><span class="badge ' + (app.blocked?'badge-danger':'badge-success') + '">' + (app.blocked?'Blocked':'Allowed') + '</span></td><td><label class="toggle"><input type="checkbox" ' + (app.blocked?'checked':'') + ' onchange="toggleApp(\'' + app.id + '\',this.checked)"><span class="toggle-slider"></span></label></td></tr>').join('') +
+    '</tbody></table>' : '<p style="color:var(--muted);padding:20px">No apps found</p>';
 }
 
 function filterApps(q) {
@@ -395,28 +605,31 @@ async function toggleApp(appId, blocked) {
 
 function loadFilter() {
   const cats = [
-    { key:'adult', icon:'🔞', label:'Adult Content' },
-    { key:'gambling', icon:'🎰', label:'Gambling' },
-    { key:'social', icon:'📱', label:'Social Media' },
-    { key:'games', icon:'🎮', label:'Gaming Sites' },
-    { key:'violence', icon:'💀', label:'Violence/Gore' },
+    { key:'adult', icon:'&#x1F51E;', label:'Adult Content' },
+    { key:'gambling', icon:'&#x1F3B0;', label:'Gambling' },
+    { key:'social', icon:'&#x1F4F1;', label:'Social Media' },
+    { key:'games', icon:'&#x1F3AE;', label:'Gaming Sites' },
+    { key:'violence', icon:'&#x1F480;', label:'Violence/Gore' },
   ];
-  document.getElementById('category-toggles').innerHTML = cats.map(c => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
-      <span>${c.icon} ${c.label}</span>
-      <label class="toggle"><input type="checkbox" onchange="toggleCategory('${c.key}',this.checked)"><span class="toggle-slider"></span></label>
-    </div>`).join('');
+  document.getElementById('category-toggles').innerHTML = cats.map(c =>
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)"><span>' + c.icon + ' ' + c.label + '</span><label class="toggle"><input type="checkbox" onchange="toggleCategory(\'' + c.key + '\',this.checked)"><span class="toggle-slider"></span></label></div>'
+  ).join('');
   loadBlockedDomains();
+}
+
+async function toggleCategory(key, blocked) {
+  if (!currentChildId) return;
+  await db.collection('families').doc(currentParentId)
+    .collection('children').doc(currentChildId)
+    .update({ ['filter_' + key]: blocked });
 }
 
 async function loadBlockedDomains() {
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId).collection('blocked_domains').get();
-  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d =>
-    `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="color:var(--danger)">🚫 ${d.id}</span>
-      <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px" onclick="unblockDomain('${d.id}')">Remove</button>
-    </div>`).join('') : '<p style="color:var(--muted)">No blocked domains</p>';
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ?
+    snap.docs.map(d => '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--danger)">&#x1F6AB; ' + d.id + '</span><button class="btn btn-ghost" style="padding:4px 12px;font-size:12px" onclick="unblockDomain(\'' + d.id + '\')">Remove</button></div>').join('') :
+    '<p style="color:var(--muted)">No blocked domains</p>';
 }
 
 async function blockDomain() {
@@ -437,16 +650,17 @@ async function unblockDomain(domain) {
 }
 
 async function loadAlerts() {
+  if (!currentChildId) return;
   const snap = await db.collection('families').doc(currentParentId)
     .collection('children').doc(currentChildId)
     .collection('alerts').orderBy('timestamp','desc').limit(50).get();
   const el = document.getElementById('alerts-list');
-  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">No alerts 🎉</p>'; return; }
+  if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px">No alerts &#x1F389;</p>'; return; }
   el.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Message</th></tr></thead><tbody>' +
     snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleString('en-IN') || '--';
-      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type}</td><td>${d.message}</td></tr>`;
+      return '<tr><td style="color:var(--muted);font-size:12px">' + time + '</td><td>' + (d.type||'--') + '</td><td>' + (d.message||'--') + '</td></tr>';
     }).join('') + '</tbody></table>';
 }
 
@@ -458,7 +672,7 @@ function loadLocation() {
       const data = doc.data();
       if (data?.location) {
         document.getElementById('location-coords').textContent =
-          `📍 ${data.locationName||''} (${data.location.lat?.toFixed(4)}, ${data.location.lng?.toFixed(4)})`;
+          '&#x1F4CD; ' + (data.locationName||'') + ' (' + data.location.lat?.toFixed(4) + ', ' + data.location.lng?.toFixed(4) + ')';
         document.getElementById('location-updated').textContent =
           'Updated: ' + new Date(data.locationUpdatedAt?.seconds*1000).toLocaleTimeString('en-IN');
       }
@@ -466,8 +680,9 @@ function loadLocation() {
 }
 
 async function downloadReport() {
+  if (!currentChildId) { alert('Select a child first'); return; }
   const token = await auth.currentUser.getIdToken();
-  window.open(`${BACKEND_URL}/reports/pdf/${currentChildId}?token=${token}`, '_blank');
+  window.open(BACKEND_URL + '/reports/pdf/' + currentChildId + '?token=' + token, '_blank');
 }
 
 setInterval(loadLiveStats, 30000);
