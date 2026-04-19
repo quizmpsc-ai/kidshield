@@ -4,12 +4,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { AppState, Alert, ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 import LoginScreen from './src/screens/auth/LoginScreen';
 import RegisterScreen from './src/screens/auth/RegisterScreen';
 import PairingScreen from './src/screens/auth/PairingScreen';
-import Dashboard from './src/screens/parent/Dashboard';
 import AppControl from './src/screens/parent/AppControl';
 import LocationTracker from './src/screens/parent/LocationTracker';
 import Reports from './src/screens/parent/Reports';
@@ -24,13 +23,27 @@ const Tab = createBottomTabNavigator();
 
 function ParentTabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false, tabBarActiveTintColor: '#00d4ff', tabBarInactiveTintColor: '#8899aa', tabBarStyle: { backgroundColor: '#111d35', borderTopColor: '#1e2d4a' } }}>
+    <Tab.Navigator screenOptions={{
+      headerShown: false,
+      tabBarActiveTintColor: '#00d4ff',
+      tabBarInactiveTintColor: '#8899aa',
+      tabBarStyle: { backgroundColor: '#111d35', borderTopColor: '#1e2d4a' }
+    }}>
       <Tab.Screen name="Dashboard" component={MultiChildDashboard} options={{ tabBarLabel: 'Dashboard' }} />
       <Tab.Screen name="Location" component={LocationTracker} options={{ tabBarLabel: 'Location' }} />
       <Tab.Screen name="Apps" component={AppControl} options={{ tabBarLabel: 'Apps' }} />
       <Tab.Screen name="Reports" component={Reports} options={{ tabBarLabel: 'Reports' }} />
       <Tab.Screen name="Settings" component={Settings} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
+  );
+}
+
+function ChildStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack.Screen name="ChildApp" component={ChildHome} />
+      <Stack.Screen name="Pairing" component={PairingScreen} />
+    </Stack.Navigator>
   );
 }
 
@@ -44,15 +57,9 @@ export default function App() {
     const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          // Firestore मधून role fetch करा
-          const doc = await firestore()
-            .collection('users')
-            .doc(firebaseUser.uid)
-            .get();
-
+          const doc = await firestore().collection('users').doc(firebaseUser.uid).get();
           if (doc.exists) {
-            const role = doc.data()?.role || 'child';
-            setUserRole(role);
+            setUserRole(doc.data()?.role || 'child');
           } else {
             setUserRole('child');
           }
@@ -67,11 +74,9 @@ export default function App() {
       }
       setInitializing(false);
     });
-
     return unsubscribe;
   }, []);
 
-  // Loading screen
   if (initializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060b14' }}>
@@ -85,24 +90,19 @@ export default function App() {
       <NavigationContainer ref={navigationRef}>
         <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           {!user ? (
-            // Not logged in
             <>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Register" component={RegisterScreen} />
               <Stack.Screen name="Pairing" component={PairingScreen} />
             </>
           ) : userRole === 'parent' ? (
-            // Parent logged in
             <>
               <Stack.Screen name="ParentApp" component={ParentTabs} />
               <Stack.Screen name="WeeklyReport" component={WeeklyReport} />
-            </>
-          ) : (
-            // Child logged in
-            <>
-              <Stack.Screen name="ChildApp" component={ChildHome} />
               <Stack.Screen name="Pairing" component={PairingScreen} />
             </>
+          ) : (
+            <Stack.Screen name="ChildStack" component={ChildStack} />
           )}
         </Stack.Navigator>
       </NavigationContainer>
