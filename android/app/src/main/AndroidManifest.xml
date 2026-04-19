@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -14,7 +15,6 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -49,7 +49,13 @@
         </intent-filter>
       </activity>
 
-      <!-- Device Admin Receiver â€” for uninstall protection -->
+      <activity
+        android:name=".BlockScreenActivity"
+        android:exported="false"
+        android:theme="@style/AppTheme"
+        android:excludeFromRecents="true"
+        android:launchMode="singleInstance" />
+
       <receiver
         android:name=".KidShieldDeviceAdmin"
         android:label="KidShield Device Admin"
@@ -64,7 +70,6 @@
         </intent-filter>
       </receiver>
 
-      <!-- Accessibility Service â€” for app blocking -->
       <service
         android:name=".KidShieldAccessibilityService"
         android:label="KidShield Parental Control"
@@ -78,19 +83,16 @@
           android:resource="@xml/accessibility_service_config" />
       </service>
 
-      <!-- Screen Capture Service -->
       <service
         android:name=".ScreenCaptureService"
         android:foregroundServiceType="mediaProjection"
         android:exported="false" />
 
-      <!-- Camera Service -->
       <service
         android:name=".RemoteCameraService"
         android:foregroundServiceType="camera"
         android:exported="false" />
 
-      <!-- Boot Receiver â€” restart services on boot -->
       <receiver
         android:name=".BootReceiver"
         android:exported="true">
@@ -99,7 +101,6 @@
         </intent-filter>
       </receiver>
 
-      <!-- Secret Dial Receiver â€” for app unhide -->
       <receiver
         android:name=".SecretDialReceiver"
         android:exported="true">
@@ -108,11 +109,5 @@
         </intent-filter>
       </receiver>
 
-          <activity
-        android:name=".BlockScreenActivity"
-        android:exported="false"
-        android:theme="@style/AppTheme"
-        android:excludeFromRecents="true"
-        android:launchMode="singleInstance" />
     </application>
 </manifest>
