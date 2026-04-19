@@ -1,8 +1,8 @@
-import { InteractionManager, AppState } from "react-native";
-
 const PerformanceManager = {
-  initialize: () => { console.log("PerformanceManager initialized"); },
-  runAfterInteractions: (task) => InteractionManager.runAfterInteractions(task),
+  createSubscriptionManager: () => ({
+    add: (unsub) => {},
+    cleanup: () => {},
+  }),
+  runAfterInteractions: (fn) => setTimeout(fn, 100),
 };
-
 export default PerformanceManager;
