@@ -1,175 +1,109 @@
-// KidShield — App.js (Session 6 — Final)
-// All sessions integrated: Security + Offline + Notifications + Crashlytics + Performance
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import auth from '@react-native-firebase/auth';
-import { AppState, Alert } from 'react-native';
+import firestore from '@react-native-firebase/firestore';
+import { AppState, Alert, ActivityIndicator, View } from 'react-native';
 
-// ── Session 1 ──
 import LoginScreen from './src/screens/auth/LoginScreen';
-import Dashboard from './src/screens/parent/Dashboard';
-import AppControl from './src/screens/parent/AppControl';
-
-// ── Session 2 ──
 import RegisterScreen from './src/screens/auth/RegisterScreen';
 import PairingScreen from './src/screens/auth/PairingScreen';
+import Dashboard from './src/screens/parent/Dashboard';
+import AppControl from './src/screens/parent/AppControl';
 import LocationTracker from './src/screens/parent/LocationTracker';
 import Reports from './src/screens/parent/Reports';
 import Settings from './src/screens/parent/Settings';
-import ChildHome from './src/screens/child/ChildHome';
-
-// ── Session 5 ──
 import MultiChildDashboard from './src/screens/parent/MultiChildDashboard';
 import WeeklyReport from './src/screens/parent/WeeklyReport';
-
-// ── Session 6 Services ──
-import SecurityManager from './src/services/SecurityManager';
-import OfflineManager from './src/services/OfflineManager';
-import NotificationManager from './src/services/NotificationManager';
-import {
-  initializeCrashlytics,
-  setupGlobalErrorHandlers,
-  ErrorBoundary,
-} from './src/services/ErrorHandler';
-import PerformanceManager from './src/services/PerformanceManager';
+import ChildHome from './src/screens/child/ChildHome';
+import { ErrorBoundary } from './src/services/ErrorHandler';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// ══════════════════════════════════════════
-// PARENT BOTTOM TABS
-// ══════════════════════════════════════════
-
 function ParentTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: '#4A90E2',
-        tabBarInactiveTintColor: '#9E9E9E',
-        tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: '#E0E0E0',
-          paddingBottom: 8,
-          height: 60,
-        },
-        headerShown: false,
-      }}
-    >
-      <Tab.Screen
-        name="Dashboard"
-        component={MultiChildDashboard}
-        options={{ tabBarLabel: 'Dashboard', tabBarIcon: () => null }}
-      />
-      <Tab.Screen
-        name="Location"
-        component={LocationTracker}
-        options={{ tabBarLabel: 'Location', tabBarIcon: () => null }}
-      />
-      <Tab.Screen
-        name="Apps"
-        component={AppControl}
-        options={{ tabBarLabel: 'Apps', tabBarIcon: () => null }}
-      />
-      <Tab.Screen
-        name="Reports"
-        component={Reports}
-        options={{ tabBarLabel: 'Reports', tabBarIcon: () => null }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={Settings}
-        options={{ tabBarLabel: 'Settings', tabBarIcon: () => null }}
-      />
+    <Tab.Navigator screenOptions={{ headerShown: false, tabBarActiveTintColor: '#00d4ff', tabBarInactiveTintColor: '#8899aa', tabBarStyle: { backgroundColor: '#111d35', borderTopColor: '#1e2d4a' } }}>
+      <Tab.Screen name="Dashboard" component={MultiChildDashboard} options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="Location" component={LocationTracker} options={{ tabBarLabel: 'Location' }} />
+      <Tab.Screen name="Apps" component={AppControl} options={{ tabBarLabel: 'Apps' }} />
+      <Tab.Screen name="Reports" component={Reports} options={{ tabBarLabel: 'Reports' }} />
+      <Tab.Screen name="Settings" component={Settings} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );
 }
 
-// ══════════════════════════════════════════
-// MAIN APP
-// ══════════════════════════════════════════
-
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const navigationRef = useRef(null);
-  const subscriptions = PerformanceManager.createSubscriptionManager();
 
   useEffect(() => {
-    initializeApp();
-    return () => subscriptions.cleanup();
+    const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Firestore मधून role fetch करा
+          const doc = await firestore()
+            .collection('users')
+            .doc(firebaseUser.uid)
+            .get();
+
+          if (doc.exists) {
+            const role = doc.data()?.role || 'child';
+            setUserRole(role);
+          } else {
+            setUserRole('child');
+          }
+        } catch (e) {
+          console.error('Role fetch error:', e);
+          setUserRole('child');
+        }
+        setUser(firebaseUser);
+      } else {
+        setUser(null);
+        setUserRole(null);
+      }
+      setInitializing(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  const initializeApp = async () => {
-    try {
-      // 1. Global error handlers (सर्वात आधी!)
-      setupGlobalErrorHandlers();
-
-      // 2. Firestore offline persistence
-      await OfflineManager.enableOfflinePersistence();
-
-      // 3. Notification channels create करा
-      await NotificationManager.createNotificationChannels();
-
-      // 4. Notification handlers setup
-      NotificationManager.setupNotificationHandlers(navigationRef.current);
-
-      // 5. Auth state observe करा
-      const authUnsub = auth().onAuthStateChanged(async (user) => {
-        if (user) {
-          // Crashlytics user set करा
-          await initializeCrashlytics({
-            uid: user.uid,
-            role: user.displayName?.includes('parent') ? 'parent' : 'child',
-          });
-
-          // Security initialize करा (deferred — UI settle होईपर्यंत wait)
-          PerformanceManager.runAfterInteractions(async () => {
-            const userRole = user.displayName?.includes('parent') ? 'parent' : 'child';
-            const securityResult = await SecurityManager.initializeSecurity(userRole);
-
-            if (securityResult.rootDetection?.isRooted) {
-              Alert.alert(
-                'Security Warning',
-                'Your device security has been compromised. Your parents have been notified.',
-                [{ text: 'OK' }]
-              );
-            }
-          });
-
-          // Offline sync setup (child device)
-          const networkUnsub = OfflineManager.setupNetworkMonitor(user.uid);
-          subscriptions.add(networkUnsub);
-        }
-      });
-
-      subscriptions.add(authUnsub);
-      console.log('[App] Initialization complete ✅');
-    } catch (err) {
-      console.error('[App] Initialization failed:', err);
-    }
-  };
+  // Loading screen
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060b14' }}>
+        <ActivityIndicator size="large" color="#00d4ff" />
+      </View>
+    );
+  }
 
   return (
-    <ErrorBoundary screenName="App">
+    <ErrorBoundary>
       <NavigationContainer ref={navigationRef}>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            animation: 'slide_from_right',
-          }}
-        >
-          {/* Auth Screens */}
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="Pairing" component={PairingScreen} />
-
-          {/* Parent App */}
-          <Stack.Screen name="ParentApp" component={ParentTabs} />
-          <Stack.Screen name="WeeklyReport" component={WeeklyReport} />
-
-          {/* Child App */}
-          <Stack.Screen name="ChildApp" component={ChildHome} />
+        <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          {!user ? (
+            // Not logged in
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="Pairing" component={PairingScreen} />
+            </>
+          ) : userRole === 'parent' ? (
+            // Parent logged in
+            <>
+              <Stack.Screen name="ParentApp" component={ParentTabs} />
+              <Stack.Screen name="WeeklyReport" component={WeeklyReport} />
+            </>
+          ) : (
+            // Child logged in
+            <>
+              <Stack.Screen name="ChildApp" component={ChildHome} />
+              <Stack.Screen name="Pairing" component={PairingScreen} />
+            </>
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </ErrorBoundary>
