@@ -22,14 +22,12 @@ public class MainApplication extends Application implements ReactApplication {
         @Override
         protected String getJSMainModuleName() { return "index"; }
         @Override
-        protected boolean isNewArchEnabled() { return false; }
+        protected boolean isNewArchEnabled() { return BuildConfig.IS_NEW_ARCHITECTURE_ENABLED; }
         @Override
-        protected Boolean isHermesEnabled() { return true; }
+        protected Boolean isHermesEnabled() { return BuildConfig.IS_HERMES_ENABLED; }
     };
-
     @Override
     public ReactNativeHost getReactNativeHost() { return mReactNativeHost; }
-
     @Override
     public void onCreate() {
         super.onCreate();

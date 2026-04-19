@@ -1,5 +1,5 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">KidShield</string>
-    <string name="accessibility_service_description">KidShield parental control service — app usage monitor आणि screen time limit साठी वापरले जाते.</string>
+    <string name="accessibility_service_description">KidShield parental control service for app monitoring and screen time limits.</string>
 </resources>

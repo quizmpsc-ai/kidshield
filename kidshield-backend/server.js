@@ -21,6 +21,64 @@ const db = admin.firestore();
 
 app.get('/health', (req, res) => res.json({ status: 'KidShield API running', version: '1.2' }));
 
+// Aliases for React Native api.js compatibility
+app.post('/api/pair/generate', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    const parentId = decoded.uid;
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    await db.collection('pairingCodes').doc(code).set({
+      parentId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+    res.json({ success: true, code });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/pair/validate', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'code required' });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    const childId = decoded.uid;
+    const doc = await db.collection('pairingCodes').doc(code.toUpperCase()).get();
+    if (!doc.exists) return res.status(400).json({ error: 'Invalid code' });
+    const data = doc.data();
+    if (data.used) return res.status(400).json({ error: 'Code already used' });
+    if (new Date(data.expiresAt.toDate()) < new Date()) return res.status(400).json({ error: 'Code expired' });
+    await db.collection('pairingCodes').doc(code.toUpperCase()).update({ used: true });
+    await db.collection('users').doc(childId).update({
+      parentId: data.parentId,
+      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await db.collection('users').doc(data.parentId).update({
+      children: admin.firestore.FieldValue.arrayUnion(childId),
+    });
+    res.json({ success: true, parentId: data.parentId });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notify', async (req, res) => {
+  try {
+    const { parentId, title, body, data } = req.body;
+    if (!parentId) return res.status(400).json({ error: 'parentId required' });
+    const parentDoc = await db.collection('users').doc(parentId).get();
+    const fcmToken = parentDoc.data()?.fcmToken;
+    if (fcmToken) {
+      await admin.messaging().send({ token: fcmToken, notification: { title, body }, data: data || {} });
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, role, name } = req.body;

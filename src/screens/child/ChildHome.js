@@ -1,5 +1,6 @@
 // src/screens/child/ChildHome.js
 import React, { useState, useEffect, useRef } from 'react';
+const API_URL = 'https://kidshield-0757.onrender.com';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Alert, Vibration, Animated, AppState
@@ -94,9 +95,9 @@ export default function ChildHome() {
       // Load with defaults
       setChildName('Child');
       setRules([
-        { text: 'School time मध्ये फक्त educational apps वापरा' },
-        { text: 'YouTube रोज जास्तीत जास्त 1 तास' },
-        { text: 'रात्री 10 नंतर phone बंद करा' },
+        { text: 'School time à¤®à¤§à¥à¤¯à¥‡ à¤«à¤•à¥à¤¤ educational apps à¤µà¤¾à¤ªà¤°à¤¾' },
+        { text: 'YouTube à¤°à¥‹à¤œ à¤œà¤¾à¤¸à¥à¤¤à¥€à¤¤ à¤œà¤¾à¤¸à¥à¤¤ 1 à¤¤à¤¾à¤¸' },
+        { text: 'à¤°à¤¾à¤¤à¥à¤°à¥€ 10 à¤¨à¤‚à¤¤à¤° phone à¤¬à¤‚à¤¦ à¤•à¤°à¤¾' },
       ]);
       setScreenTimeToday(45);
       setScreenTimeLimit(120);
@@ -154,26 +155,26 @@ export default function ChildHome() {
           await firestore.collection('alerts').add({
             childId: uid,
             type: 'sos',
-            message: `🆘 ${childName} ने SOS पाठवले! त्यांना मदत हवी आहे.`,
+            message: `ðŸ†˜ ${childName} à¤¨à¥‡ SOS à¤ªà¤¾à¤ à¤µà¤²à¥‡! à¤¤à¥à¤¯à¤¾à¤‚à¤¨à¤¾ à¤®à¤¦à¤¤ à¤¹à¤µà¥€ à¤†à¤¹à¥‡.`,
             createdAt: firestore.FieldValue.serverTimestamp(),
             read: false,
           });
 
           // FCM notification to parent
-          await fetch(`${process.env.API_URL}/api/notify`, {
+          await fetch(`${API_URL}/api/notify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               parentId,
-              title: '🆘 SOS Alert!',
-              body: `${childName} ला मदत हवी आहे! त्यांचे location check करा.`,
+              title: 'ðŸ†˜ SOS Alert!',
+              body: `${childName} à¤²à¤¾ à¤®à¤¦à¤¤ à¤¹à¤µà¥€ à¤†à¤¹à¥‡! à¤¤à¥à¤¯à¤¾à¤‚à¤šà¥‡ location check à¤•à¤°à¤¾.`,
             }),
           });
         }
 
-        Alert.alert('🆘 SOS पाठवले!', 'Parent ला alert गेला. ते लवकरच येतील.', [{ text: 'OK' }]);
+        Alert.alert('ðŸ†˜ SOS à¤ªà¤¾à¤ à¤µà¤²à¥‡!', 'Parent à¤²à¤¾ alert à¤—à¥‡à¤²à¤¾. à¤¤à¥‡ à¤²à¤µà¤•à¤°à¤š à¤¯à¥‡à¤¤à¥€à¤².', [{ text: 'OK' }]);
       } catch (e) {
-        Alert.alert('SOS पाठवले', 'Alert send केला!');
+        Alert.alert('SOS à¤ªà¤¾à¤ à¤µà¤²à¥‡', 'Alert send à¤•à¥‡à¤²à¤¾!');
       }
     }, 3000);
 
@@ -194,7 +195,7 @@ export default function ChildHome() {
   const formatTime = (mins) => {
     const h = Math.floor(mins / 60);
     const m = mins % 60;
-    return h > 0 ? `${h} तास ${m} मिनिटे` : `${m} मिनिटे`;
+    return h > 0 ? `${h} à¤¤à¤¾à¤¸ ${m} à¤®à¤¿à¤¨à¤¿à¤Ÿà¥‡` : `${m} à¤®à¤¿à¤¨à¤¿à¤Ÿà¥‡`;
   };
 
   return (
@@ -202,26 +203,26 @@ export default function ChildHome() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>नमस्कार, {childName}! 👋</Text>
+          <Text style={styles.greeting}>à¤¨à¤®à¤¸à¥à¤•à¤¾à¤°, {childName}! ðŸ‘‹</Text>
           <Text style={styles.date}>{new Date().toLocaleDateString('mr-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
         </View>
-        <Text style={{ fontSize: 36 }}>🛡️</Text>
+        <Text style={{ fontSize: 36 }}>ðŸ›¡ï¸</Text>
       </View>
 
       {/* Bedtime Warning */}
       {bedtimeActive && (
         <View style={styles.bedtimeWarning}>
-          <Text style={styles.bedtimeIcon}>🌙</Text>
+          <Text style={styles.bedtimeIcon}>ðŸŒ™</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.bedtimeTitle}>Bedtime वेळ झाला!</Text>
-            <Text style={styles.bedtimeText}>Phone ठेवा आणि झोपा. उद्या सकाळी use करा.</Text>
+            <Text style={styles.bedtimeTitle}>Bedtime à¤µà¥‡à¤³ à¤à¤¾à¤²à¤¾!</Text>
+            <Text style={styles.bedtimeText}>Phone à¤ à¥‡à¤µà¤¾ à¤†à¤£à¤¿ à¤à¥‹à¤ªà¤¾. à¤‰à¤¦à¥à¤¯à¤¾ à¤¸à¤•à¤¾à¤³à¥€ use à¤•à¤°à¤¾.</Text>
           </View>
         </View>
       )}
 
       {/* Screen Time */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>📱 आजचा Screen Time</Text>
+        <Text style={styles.cardTitle}>ðŸ“± à¤†à¤œà¤šà¤¾ Screen Time</Text>
         <View style={styles.timeDisplay}>
           <Text style={[styles.timeValue, { color: usageColor }]}>{formatTime(screenTimeToday)}</Text>
           <Text style={styles.timeLimit}>/ {formatTime(screenTimeLimit)} limit</Text>
@@ -231,18 +232,18 @@ export default function ChildHome() {
         </View>
         <Text style={[styles.progressText, { color: usageColor }]}>
           {usagePercent >= 100
-            ? '⚠️ Screen time limit संपली!'
-            : `${Math.round(100 - usagePercent)}% वेळ शिल्लक आहे`}
+            ? 'âš ï¸ Screen time limit à¤¸à¤‚à¤ªà¤²à¥€!'
+            : `${Math.round(100 - usagePercent)}% à¤µà¥‡à¤³ à¤¶à¤¿à¤²à¥à¤²à¤• à¤†à¤¹à¥‡`}
         </Text>
       </View>
 
       {/* Rules */}
       {rules.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>📋 माझे Rules</Text>
+          <Text style={styles.cardTitle}>ðŸ“‹ à¤®à¤¾à¤à¥‡ Rules</Text>
           {rules.map((rule, i) => (
             <View key={i} style={styles.ruleRow}>
-              <Text style={styles.ruleDot}>•</Text>
+              <Text style={styles.ruleDot}>â€¢</Text>
               <Text style={styles.ruleText}>{rule.text}</Text>
             </View>
           ))}
@@ -252,7 +253,7 @@ export default function ChildHome() {
       {/* Blocked Apps */}
       {blockedApps.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>🚫 Blocked Apps</Text>
+          <Text style={styles.cardTitle}>ðŸš« Blocked Apps</Text>
           <View style={styles.blockedList}>
             {blockedApps.map((app, i) => (
               <View key={i} style={styles.blockedChip}>
@@ -265,7 +266,7 @@ export default function ChildHome() {
 
       {/* SOS Button */}
       <View style={styles.sosSection}>
-        <Text style={styles.sosLabel}>Emergency मध्ये Parent ला alert करा:</Text>
+        <Text style={styles.sosLabel}>Emergency à¤®à¤§à¥à¤¯à¥‡ Parent à¤²à¤¾ alert à¤•à¤°à¤¾:</Text>
         <Animated.View style={[{ transform: [{ scale: pulseAnim }] }]}>
           <TouchableOpacity
             style={[styles.sosBtn, sosPressed && styles.sosBtnActive]}
@@ -273,9 +274,9 @@ export default function ChildHome() {
             onPressOut={handleSOSRelease}
             activeOpacity={0.8}
           >
-            <Text style={styles.sosBtnIcon}>🆘</Text>
+            <Text style={styles.sosBtnIcon}>ðŸ†˜</Text>
             <Text style={styles.sosBtnText}>SOS</Text>
-            <Text style={styles.sosBtnHint}>{sosPressed ? '3 seconds hold करा...' : '3 seconds hold करा'}</Text>
+            <Text style={styles.sosBtnHint}>{sosPressed ? '3 seconds hold à¤•à¤°à¤¾...' : '3 seconds hold à¤•à¤°à¤¾'}</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>

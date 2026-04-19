@@ -9,7 +9,7 @@ import auth from '@react-native-firebase/auth';
 import axios from 'axios';
 
 const { UsageStats } = NativeModules;
-const API_URL = 'https://your-backend-url.railway.app'; // Railway URL टाका
+const API_URL = 'https://kidshield-0757.onrender.com'; // Railway URL à¤Ÿà¤¾à¤•à¤¾
 
 class ChildMonitorService {
   constructor() {
@@ -19,7 +19,7 @@ class ChildMonitorService {
     this.commandPollInterval = null;
   }
 
-  // ── Initialize service ──
+  // â”€â”€ Initialize service â”€â”€
   async init() {
     this.childId = auth().currentUser?.uid;
     if (!this.childId) return;
@@ -31,10 +31,10 @@ class ChildMonitorService {
     this.startUsageReporting();
     this.setupBackgroundFetch();
 
-    console.log('🛡️ KidShield monitoring started');
+    console.log('ðŸ›¡ï¸ KidShield monitoring started');
   }
 
-  // ── Load app rules from Firestore ──
+  // â”€â”€ Load app rules from Firestore â”€â”€
   async loadAppRules() {
     const snap = await firestore()
       .collection('appRules')
@@ -47,7 +47,7 @@ class ChildMonitorService {
     });
   }
 
-  // ── Listen for rule changes in real-time ──
+  // â”€â”€ Listen for rule changes in real-time â”€â”€
   listenForRules() {
     firestore()
       .collection('appRules')
@@ -61,7 +61,7 @@ class ChildMonitorService {
       });
   }
 
-  // ── Listen for commands from parent ──
+  // â”€â”€ Listen for commands from parent â”€â”€
   listenForCommands() {
     firestore()
       .collection('commands')
@@ -74,7 +74,7 @@ class ChildMonitorService {
       });
   }
 
-  // ── Execute parent commands ──
+  // â”€â”€ Execute parent commands â”€â”€
   async executeCommand(commandId, commandData) {
     const { command } = commandData;
     console.log('Executing command:', command);
@@ -83,14 +83,14 @@ class ChildMonitorService {
       case 'LOCK_DEVICE':
         // Show full-screen lock overlay
         Alert.alert(
-          '🔒 Phone Locked',
-          'Parent ने phone lock केला आहे.',
+          'ðŸ”’ Phone Locked',
+          'Parent à¤¨à¥‡ phone lock à¤•à¥‡à¤²à¤¾ à¤†à¤¹à¥‡.',
           [], { cancelable: false }
         );
         break;
 
       case 'BEDTIME_MODE':
-        Alert.alert('🌙 Bedtime Mode', 'झोपायची वेळ झाली! Good night!', [], { cancelable: false });
+        Alert.alert('ðŸŒ™ Bedtime Mode', 'à¤à¥‹à¤ªà¤¾à¤¯à¤šà¥€ à¤µà¥‡à¤³ à¤à¤¾à¤²à¥€! Good night!', [], { cancelable: false });
         break;
 
       case 'SCAN_APPS':
@@ -114,7 +114,7 @@ class ChildMonitorService {
     await firestore().collection('commands').doc(commandId).update({ status: 'executed' });
   }
 
-  // ── Location Tracking ──
+  // â”€â”€ Location Tracking â”€â”€
   startLocationTracking() {
     // Report location every 5 minutes
     this.locationInterval = setInterval(() => {
@@ -149,7 +149,7 @@ class ChildMonitorService {
     });
   }
 
-  // ── Usage Reporting ──
+  // â”€â”€ Usage Reporting â”€â”€
   startUsageReporting() {
     // Report usage every 15 minutes
     setInterval(async () => {
@@ -182,7 +182,7 @@ class ChildMonitorService {
     }
   }
 
-  // ── Enforce app time limits locally ──
+  // â”€â”€ Enforce app time limits locally â”€â”€
   enforceLocalRules(apps) {
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -193,20 +193,20 @@ class ChildMonitorService {
 
       // Check if blocked
       if (rule.isBlocked) {
-        this.showBlockOverlay(app.appName, 'इस app को parent ने block केला आहे.');
+        this.showBlockOverlay(app.appName, 'à¤‡à¤¸ app à¤•à¥‹ parent à¤¨à¥‡ block à¤•à¥‡à¤²à¤¾ à¤†à¤¹à¥‡.');
         continue;
       }
 
       // Check time schedule
       if (rule.blockFrom && rule.blockUntil) {
         if (this.isTimeInRange(currentTime, rule.blockFrom, rule.blockUntil)) {
-          this.showBlockOverlay(app.appName, `हा app ${rule.blockFrom} - ${rule.blockUntil} या वेळात बंद आहे.`);
+          this.showBlockOverlay(app.appName, `à¤¹à¤¾ app ${rule.blockFrom} - ${rule.blockUntil} à¤¯à¤¾ à¤µà¥‡à¤³à¤¾à¤¤ à¤¬à¤‚à¤¦ à¤†à¤¹à¥‡.`);
         }
       }
 
       // Check daily limit
       if (rule.dailyLimitMinutes && app.minutesUsed >= rule.dailyLimitMinutes) {
-        this.showBlockOverlay(app.appName, `${rule.dailyLimitMinutes} minutes चा daily limit संपला.`);
+        this.showBlockOverlay(app.appName, `${rule.dailyLimitMinutes} minutes à¤šà¤¾ daily limit à¤¸à¤‚à¤ªà¤²à¤¾.`);
       }
     }
   }
@@ -217,10 +217,10 @@ class ChildMonitorService {
   }
 
   showBlockOverlay(appName, reason) {
-    Alert.alert(`🚫 ${appName} Blocked`, reason, [{ text: 'OK' }]);
+    Alert.alert(`ðŸš« ${appName} Blocked`, reason, [{ text: 'OK' }]);
   }
 
-  // ── Scan installed apps ──
+  // â”€â”€ Scan installed apps â”€â”€
   async scanAndReportApps() {
     try {
       const apps = await UsageStats.getInstalledApps();
@@ -233,7 +233,7 @@ class ChildMonitorService {
     }
   }
 
-  // ── Background Fetch ──
+  // â”€â”€ Background Fetch â”€â”€
   setupBackgroundFetch() {
     BackgroundFetch.configure({
       minimumFetchInterval: 15, // minutes
@@ -247,7 +247,7 @@ class ChildMonitorService {
     });
   }
 
-  // ── Stop service ──
+  // â”€â”€ Stop service â”€â”€
   stop() {
     if (this.locationInterval) clearInterval(this.locationInterval);
     if (this.commandPollInterval) clearInterval(this.commandPollInterval);
@@ -256,3 +256,4 @@ class ChildMonitorService {
 }
 
 export default new ChildMonitorService();
+

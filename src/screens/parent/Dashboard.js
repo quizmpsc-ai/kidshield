@@ -31,8 +31,9 @@ export default function ParentDashboard({ navigation }) {
   const fetchChildren = async () => {
     try {
       const snap = await firestore()
-        .collection('users').doc(uid)
-        .collection('children').get();
+        .collection('users')
+        .where('parentId', '==', uid)
+        .get();
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setChildren(list);
       if (list.length > 0) setSelectedChild(list[0]);
@@ -77,10 +78,10 @@ export default function ParentDashboard({ navigation }) {
 
   const lockChildPhone = async () => {
     if (!selectedChild) return;
-    Alert.alert('Phone Lock', `${selectedChild.name} चा phone lock करायचा का?`, [
+    Alert.alert('Phone Lock', `${selectedChild.name} à¤šà¤¾ phone lock à¤•à¤°à¤¾à¤¯à¤šà¤¾ à¤•à¤¾?`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Lock करा',
+        text: 'Lock à¤•à¤°à¤¾',
         style: 'destructive',
         onPress: async () => {
           await firestore().collection('commands').add({
@@ -89,7 +90,7 @@ export default function ParentDashboard({ navigation }) {
             status: 'pending',
             createdAt: firestore.FieldValue.serverTimestamp(),
           });
-          Alert.alert('Done!', 'Lock command पाठवला.');
+          Alert.alert('Done!', 'Lock command à¤ªà¤¾à¤ à¤µà¤²à¤¾.');
         },
       },
     ]);
@@ -111,7 +112,7 @@ export default function ParentDashboard({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>नमस्कार! 👋</Text>
+          <Text style={styles.greeting}>à¤¨à¤®à¤¸à¥à¤•à¤¾à¤°! ðŸ‘‹</Text>
           <Text style={styles.headerTitle}>KidShield Dashboard</Text>
         </View>
         <TouchableOpacity
@@ -129,7 +130,7 @@ export default function ParentDashboard({ navigation }) {
               key={child.id}
               style={[styles.childChip, selectedChild?.id === child.id && styles.childChipActive]}
               onPress={() => setSelectedChild(child)}>
-              <Text style={{ fontSize: 20 }}>{child.avatar || '👦'}</Text>
+              <Text style={{ fontSize: 20 }}>{child.avatar || 'ðŸ‘¦'}</Text>
               <Text style={[styles.childChipName, selectedChild?.id === child.id && { color: COLORS.accent }]}>
                 {child.name}
               </Text>
@@ -142,9 +143,9 @@ export default function ParentDashboard({ navigation }) {
       {/* No children */}
       {children.length === 0 && (
         <TouchableOpacity style={styles.emptyCard} onPress={() => navigation.navigate('Pairing')}>
-          <Text style={{ fontSize: 40, marginBottom: 12 }}>📱</Text>
-          <Text style={styles.emptyTitle}>Child Device Add करा</Text>
-          <Text style={styles.emptyText}>पहिल्यांदा मुलाचा phone pair करा</Text>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>ðŸ“±</Text>
+          <Text style={styles.emptyTitle}>Child Device Add à¤•à¤°à¤¾</Text>
+          <Text style={styles.emptyText}>à¤ªà¤¹à¤¿à¤²à¥à¤¯à¤¾à¤‚à¤¦à¤¾ à¤®à¥à¤²à¤¾à¤šà¤¾ phone pair à¤•à¤°à¤¾</Text>
         </TouchableOpacity>
       )}
 
@@ -153,22 +154,22 @@ export default function ParentDashboard({ navigation }) {
         <>
           <View style={styles.statsGrid}>
             <View style={[styles.statCard, { borderColor: 'rgba(0,212,255,0.2)' }]}>
-              <Text style={styles.statIcon}>⏱️</Text>
+              <Text style={styles.statIcon}>â±ï¸</Text>
               <Text style={styles.statNum}>{formatTime(stats?.totalMinutes)}</Text>
               <Text style={styles.statLabel}>Screen Time Today</Text>
             </View>
             <View style={[styles.statCard, { borderColor: 'rgba(0,229,160,0.2)' }]}>
-              <Text style={styles.statIcon}>📱</Text>
+              <Text style={styles.statIcon}>ðŸ“±</Text>
               <Text style={[styles.statNum, { color: COLORS.green }]}>{stats?.appsUsed || 0}</Text>
               <Text style={styles.statLabel}>Apps Used</Text>
             </View>
             <View style={[styles.statCard, { borderColor: 'rgba(255,95,95,0.2)' }]}>
-              <Text style={styles.statIcon}>🚫</Text>
+              <Text style={styles.statIcon}>ðŸš«</Text>
               <Text style={[styles.statNum, { color: COLORS.red }]}>{stats?.blockedAttempts || 0}</Text>
               <Text style={styles.statLabel}>Blocked</Text>
             </View>
             <View style={[styles.statCard, { borderColor: 'rgba(255,165,0,0.2)' }]}>
-              <Text style={styles.statIcon}>🔋</Text>
+              <Text style={styles.statIcon}>ðŸ”‹</Text>
               <Text style={[styles.statNum, { color: COLORS.orange }]}>{selectedChild.battery || '--'}%</Text>
               <Text style={styles.statLabel}>Battery</Text>
             </View>
@@ -178,19 +179,19 @@ export default function ParentDashboard({ navigation }) {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity style={styles.actionBtn} onPress={lockChildPhone}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>🔒</Text>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>ðŸ”’</Text>
               <Text style={styles.actionLabel}>Phone Lock</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => navigation.navigate('Location')}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>📍</Text>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>ðŸ“</Text>
               <Text style={styles.actionLabel}>Location</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => navigation.navigate('AppControl')}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>⚙️</Text>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>âš™ï¸</Text>
               <Text style={styles.actionLabel}>App Control</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -202,9 +203,9 @@ export default function ParentDashboard({ navigation }) {
                   status: 'pending',
                   createdAt: firestore.FieldValue.serverTimestamp(),
                 });
-                Alert.alert('Done!', 'Bedtime mode activate केला.');
+                Alert.alert('Done!', 'Bedtime mode activate à¤•à¥‡à¤²à¤¾.');
               }}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>🌙</Text>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>ðŸŒ™</Text>
               <Text style={styles.actionLabel}>Bedtime</Text>
             </TouchableOpacity>
           </View>
@@ -212,12 +213,12 @@ export default function ParentDashboard({ navigation }) {
           {/* Location Status */}
           <View style={styles.locationCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <Text style={{ fontSize: 20 }}>📍</Text>
+              <Text style={{ fontSize: 20 }}>ðŸ“</Text>
               <Text style={styles.locationTitle}>Current Location</Text>
               <View style={[styles.onlineDot, { backgroundColor: COLORS.green, marginLeft: 'auto' }]} />
             </View>
             <Text style={{ color: COLORS.text, fontSize: 14, fontFamily: FONTS.medium }}>
-              {selectedChild.lastLocation?.address || 'Location update होत आहे...'}
+              {selectedChild.lastLocation?.address || 'Location update à¤¹à¥‹à¤¤ à¤†à¤¹à¥‡...'}
             </Text>
             <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
               {selectedChild.lastLocation?.updatedAt ? `Updated: ${selectedChild.lastLocation.updatedAt}` : ''}
@@ -229,18 +230,18 @@ export default function ParentDashboard({ navigation }) {
       {/* Alerts */}
       {alerts.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>⚠️ Alerts ({alerts.length})</Text>
+          <Text style={styles.sectionTitle}>âš ï¸ Alerts ({alerts.length})</Text>
           {alerts.map(alert => (
             <TouchableOpacity
               key={alert.id}
               style={styles.alertCard}
               onPress={() => markAlertRead(alert.id)}>
-              <Text style={{ fontSize: 20, marginRight: 12 }}>{alert.icon || '⚠️'}</Text>
+              <Text style={{ fontSize: 20, marginRight: 12 }}>{alert.icon || 'âš ï¸'}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.alertTitle}>{alert.title}</Text>
                 <Text style={styles.alertBody}>{alert.body}</Text>
               </View>
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>✕</Text>
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>âœ•</Text>
             </TouchableOpacity>
           ))}
         </>

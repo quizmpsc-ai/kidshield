@@ -4,20 +4,16 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform
 } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 const COLORS = {
-  bg: '#060b14',
-  accent: '#00d4ff',
-  card: '#111d35',
-  text: '#ffffff',
-  subtext: '#8899aa',
-  error: '#ff4444',
-  success: '#00cc88',
-  border: '#1e2d4a',
+  bg: '#060b14', accent: '#00d4ff', card: '#111d35',
+  text: '#ffffff', subtext: '#8899aa', border: '#1e2d4a',
 };
 
 export default function RegisterScreen({ navigation }) {
-  const [role, setRole] = useState('parent'); // 'parent' or 'child'
+  const [role, setRole] = useState('parent');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,14 +36,10 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // Firebase auth
-      const { createUserWithEmailAndPassword, updateProfile } = await import('@react-native-firebase/auth').then(m => m.default());
-      const userCredential = await createUserWithEmailAndPassword(email.trim(), password);
-      await updateProfile(userCredential.user, { displayName: name });
+      const userCredential = await auth().createUserWithEmailAndPassword(email.trim(), password);
+      await userCredential.user.updateProfile({ displayName: name.trim() });
 
-      // Firestore मध्ये user document बनवा
-      const firestore = (await import('@react-native-firebase/firestore')).default();
-      await firestore.collection('users').doc(userCredential.user.uid).set({
+      await firestore().collection('users').doc(userCredential.user.uid).set({
         name: name.trim(),
         email: email.trim(),
         role: role,
@@ -84,23 +76,19 @@ export default function RegisterScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.logo}>🛡️ KidShield</Text>
           <Text style={styles.title}>नवीन Account बनवा</Text>
           <Text style={styles.subtitle}>तुम्ही कोण आहात ते निवडा</Text>
         </View>
 
-        {/* Role Selector */}
         <View style={styles.roleContainer}>
           <TouchableOpacity
             style={[styles.roleBtn, role === 'parent' && styles.roleBtnActive]}
             onPress={() => setRole('parent')}
           >
             <Text style={styles.roleIcon}>👨‍👩‍👧</Text>
-            <Text style={[styles.roleText, role === 'parent' && { color: COLORS.accent }]}>
-              Parent
-            </Text>
+            <Text style={[styles.roleText, role === 'parent' && { color: COLORS.accent }]}>Parent</Text>
             <Text style={styles.roleDesc}>मुलांवर नजर ठेवा</Text>
           </TouchableOpacity>
 
@@ -109,88 +97,47 @@ export default function RegisterScreen({ navigation }) {
             onPress={() => setRole('child')}
           >
             <Text style={styles.roleIcon}>👦</Text>
-            <Text style={[styles.roleText, role === 'child' && { color: COLORS.accent }]}>
-              Child
-            </Text>
+            <Text style={[styles.roleText, role === 'child' && { color: COLORS.accent }]}>Child</Text>
             <Text style={styles.roleDesc}>माझे device register करा</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>पूर्ण नाव</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="तुमचे नाव"
-              placeholderTextColor={COLORS.subtext}
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-            />
+            <TextInput style={styles.input} placeholder="तुमचे नाव"
+              placeholderTextColor={COLORS.subtext} value={name}
+              onChangeText={setName} autoCapitalize="words" />
           </View>
-
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="email@example.com"
-              placeholderTextColor={COLORS.subtext}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <TextInput style={styles.input} placeholder="email@example.com"
+              placeholderTextColor={COLORS.subtext} value={email}
+              onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
           </View>
-
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="कमीत कमी 6 characters"
-              placeholderTextColor={COLORS.subtext}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <TextInput style={styles.input} placeholder="कमीत कमी 6 characters"
+              placeholderTextColor={COLORS.subtext} value={password}
+              onChangeText={setPassword} secureTextEntry />
           </View>
-
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password Confirm करा</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="वरील password पुन्हा टाका"
-              placeholderTextColor={COLORS.subtext}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-          </View>
-
-          {/* Info box based on role */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoText}>
-              {role === 'parent'
-                ? '💡 Parent account मध्ये तुम्ही मुलांचे devices monitor आणि control करू शकता.'
-                : '💡 Child account register केल्यावर तुम्हाला Parent चा pairing code विचारला जाईल.'}
-            </Text>
+            <TextInput style={styles.input} placeholder="वरील password पुन्हा टाका"
+              placeholderTextColor={COLORS.subtext} value={confirmPassword}
+              onChangeText={setConfirmPassword} secureTextEntry />
           </View>
 
           <TouchableOpacity
             style={[styles.registerBtn, loading && { opacity: 0.7 }]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
+            onPress={handleRegister} disabled={loading}>
             {loading
               ? <ActivityIndicator color="#000" />
               : <Text style={styles.registerBtnText}>Account बनवा</Text>
             }
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.loginLink}
-            onPress={() => navigation.navigate('Login')}
-          >
+          <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login')}>
             <Text style={styles.loginLinkText}>
               आधीच account आहे? <Text style={{ color: COLORS.accent }}>Login करा</Text>
             </Text>
@@ -207,37 +154,21 @@ const styles = StyleSheet.create({
   logo: { fontSize: 40, marginBottom: 8 },
   title: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#8899aa' },
-
   roleContainer: { flexDirection: 'row', gap: 12, marginBottom: 28 },
-  roleBtn: {
-    flex: 1, backgroundColor: '#111d35', borderRadius: 16,
-    padding: 20, alignItems: 'center', borderWidth: 2, borderColor: '#1e2d4a',
-  },
+  roleBtn: { flex: 1, backgroundColor: '#111d35', borderRadius: 16, padding: 20,
+    alignItems: 'center', borderWidth: 2, borderColor: '#1e2d4a' },
   roleBtnActive: { borderColor: '#00d4ff', backgroundColor: '#0a1628' },
   roleIcon: { fontSize: 30, marginBottom: 8 },
   roleText: { fontSize: 16, fontWeight: '700', color: '#ffffff', marginBottom: 4 },
   roleDesc: { fontSize: 11, color: '#8899aa', textAlign: 'center' },
-
   form: {},
   inputGroup: { marginBottom: 16 },
   label: { color: '#8899aa', fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  input: {
-    backgroundColor: '#111d35', borderRadius: 12, padding: 14,
-    color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#1e2d4a',
-  },
-
-  infoBox: {
-    backgroundColor: '#0a1628', borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#00d4ff33', marginBottom: 20, marginTop: 4,
-  },
-  infoText: { color: '#8899aa', fontSize: 13, lineHeight: 20 },
-
-  registerBtn: {
-    backgroundColor: '#00d4ff', borderRadius: 14, padding: 16,
-    alignItems: 'center', marginBottom: 16,
-  },
+  input: { backgroundColor: '#111d35', borderRadius: 12, padding: 14,
+    color: '#ffffff', fontSize: 15, borderWidth: 1, borderColor: '#1e2d4a' },
+  registerBtn: { backgroundColor: '#00d4ff', borderRadius: 14, padding: 16,
+    alignItems: 'center', marginBottom: 16, marginTop: 8 },
   registerBtnText: { color: '#000', fontSize: 16, fontWeight: '700' },
-
   loginLink: { alignItems: 'center', paddingVertical: 8 },
   loginLinkText: { color: '#8899aa', fontSize: 14 },
 });
