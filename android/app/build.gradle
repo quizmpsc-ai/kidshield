@@ -67,6 +67,9 @@ dependencies {
     implementation "com.google.android.gms:play-services-location:21.1.0"
     implementation "com.google.android.gms:play-services-maps:18.2.0"
     implementation "androidx.multidex:multidex:2.0.1"
+implementation "androidx.lifecycle:lifecycle-process:2.6.1"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.6.1"
+    implementation "androidx.startup:startup-runtime:1.1.1"
 }
 
 apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
