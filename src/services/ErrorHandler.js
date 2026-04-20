@@ -26,9 +26,9 @@ export class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <View style={s.container}>
-          <Text style={s.title}>काहीतरी चुकले</Text>
+          <Text style={s.title}>à¤•à¤¾à¤¹à¥€à¤¤à¤°à¥€ à¤šà¥à¤•à¤²à¥‡</Text>
           <TouchableOpacity style={s.btn} onPress={() => this.setState({ hasError: false })}>
-            <Text style={s.btnText}>पुन्हा प्रयत्न करा</Text>
+            <Text style={s.btnText}>à¤ªà¥à¤¨à¥à¤¹à¤¾ à¤ªà¥à¤°à¤¯à¤¤à¥à¤¨ à¤•à¤°à¤¾</Text>
           </TouchableOpacity>
         </View>
       );
@@ -45,9 +45,9 @@ export default class ErrorHandler extends Component {
     if (this.state.hasError) {
       return (
         <View style={s.container}>
-          <Text style={s.title}>काहीतरी चुकले</Text>
+          <Text style={s.title}>à¤•à¤¾à¤¹à¥€à¤¤à¤°à¥€ à¤šà¥à¤•à¤²à¥‡</Text>
           <TouchableOpacity style={s.btn} onPress={() => this.setState({ hasError: false })}>
-            <Text style={s.btnText}>पुन्हा प्रयत्न करा</Text>
+            <Text style={s.btnText}>à¤ªà¥à¤¨à¥à¤¹à¤¾ à¤ªà¥à¤°à¤¯à¤¤à¥à¤¨ à¤•à¤°à¤¾</Text>
           </TouchableOpacity>
         </View>
       );

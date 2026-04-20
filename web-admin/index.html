@@ -362,7 +362,7 @@
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
                 <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã‚Â  Turn Audio ON</button>
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
           <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
              <p style="color:var(--muted)">Select a feature above to start monitoring</p>
           </div>
@@ -514,7 +514,7 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ Web Admin connected to Socket.io');
+        console.log('Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
@@ -608,11 +608,11 @@ function toggleAudioStream() {
   const btn = document.getElementById('audio-toggle-btn');
   
   if (isAudioActive) {
-    btn.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â  Mute Audio';
+    btn.textContent = 'Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
   } else {
-    btn.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡ Turn Audio ON';
+    btn.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -664,7 +664,7 @@ function toggleLive(mode) {
   liveTimeout = setTimeout(() => {
       const el = document.getElementById('stream-content');
       if(el && el.innerHTML.includes('spinner')) {
-          el.innerHTML = '<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);"><span style="font-size:30px;">âš ï¸</span><br/><br/><b style="font-size:16px;">Connection Timeout Error</b><br/><br/><div style="text-align:left; font-size:13px; color:#fca5a5;"><b>Why is this happening?</b><br/>1. The KidShield app is closed or killed by Android Battery Saver.<br/>2. Internet is OFF on the child phone.<br/>3. Accessibility or Camera permissions are missing/denied.<br/><br/><b>Fix:</b> Open the app on child phone, check permissions, and try again.</div></div>';
+          el.innerHTML = '<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);"><span style="font-size:30px;">Ã¢Å¡Â Ã¯Â¸Â</span><br/><br/><b style="font-size:16px;">Connection Timeout Error</b><br/><br/><div style="text-align:left; font-size:13px; color:#fca5a5;"><b>Why is this happening?</b><br/>1. The KidShield app is closed or killed by Android Battery Saver.<br/>2. Internet is OFF on the child phone.<br/>3. Accessibility or Camera permissions are missing/denied.<br/><br/><b>Fix:</b> Open the app on child phone, check permissions, and try again.</div></div>';
           const statusEl = document.getElementById('status-' + currentLiveMode);
           if(statusEl) { statusEl.textContent = 'Connection Failed'; statusEl.className = 'live-status'; }
       }
@@ -821,7 +821,7 @@ function selectChild(childId, tabEl) {
   stopAllLive();
   loadChildData();
 
-  // Ã°Å¸â€Â¥ FORCE REFRESH CURRENT SECTION FOR NEW CHILD
+  // ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â¥ FORCE REFRESH CURRENT SECTION FOR NEW CHILD
   const activeNav = document.querySelector(".nav-item.active");
   if (activeNav) {
       const sec = activeNav.id.replace("nav-", "");
