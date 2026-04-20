@@ -16,6 +16,7 @@ class RemoteCommandHandler {
     this.socket = null;
     this.screenListener = null;
     this.cameraListener = null;
+    this.securityAlertListener = null;
     this.audioListener = null;
   }
 
@@ -31,8 +32,26 @@ class RemoteCommandHandler {
 
     // Connect to WebSockets
     this.socket = io(SOCKET_SERVER_URL);
+        // SYNC RULES TO NATIVE (For Accessibility Service)
+    this.socket.on('receive_rules', async (rules) => {
+        if (NativeModules.KidShieldModule) {
+            const { KidShieldModule } = NativeModules;
+            if (rules.apps) {
+                rules.apps.forEach(app => KidShieldModule.syncBoolRule("block_" + app.packageName, app.blocked));
+            }
+            if (rules.screenTime) {
+                KidShieldModule.syncIntRule("daily_limit_mins", rules.screenTime.limitMins || 0);
+                KidShieldModule.syncRule("bedtime_start", rules.screenTime.start || "");
+                KidShieldModule.syncRule("bedtime_end", rules.screenTime.end || "");
+            }
+            if (rules.webFilter) {
+                KidShieldModule.syncBoolRule("filter_adult", rules.webFilter.blockAdult || false);
+                KidShieldModule.syncRule("blocked_domains", rules.webFilter.domains || "");
+            }
+        }
+    });
     this.socket.on('connect', () => {
-        console.log('âœ… Child Socket Connected:', this.socket.id);
+        console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Child Socket Connected:', this.socket.id);
         this.socket.emit('join_room', { parentId: this.parentId });
     });
 
@@ -76,7 +95,7 @@ class RemoteCommandHandler {
       });
 
     this.isInitialized = true;
-    console.log('ðŸŽ¯ RemoteCommandHandler Ready (Socket.io Enabled)');
+    console.log('ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¯ RemoteCommandHandler Ready (Socket.io Enabled)');
   }
 
   async handleCommand(commandId, commandData) {
@@ -107,7 +126,7 @@ class RemoteCommandHandler {
           if (ScreenMirror) await ScreenMirror.stopLiveView();
           break;
         case 'LOCK_DEVICE':
-          Alert.alert('ðŸ”’ Phone Locked', 'Parent à¤¨à¥‡ phone lock à¤•à¥‡à¤²à¤¾.', [], { cancelable: false });
+          Alert.alert('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬â„¢ Phone Locked', 'Parent ÃƒÂ Ã‚Â¤Ã‚Â¨ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ phone lock ÃƒÂ Ã‚Â¤Ã¢â‚¬Â¢ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¤Ã‚Â¾.', [], { cancelable: false });
           break;
       }
 
@@ -122,6 +141,7 @@ class RemoteCommandHandler {
     if (this.screenListener) this.screenListener.remove();
     if (this.cameraListener) this.cameraListener.remove();
     if (this.audioListener) this.audioListener.remove();
+    if (this.securityAlertListener) this.securityAlertListener.remove();
     if (this.socket) this.socket.disconnect();
     if (RemoteCamera) RemoteCamera.stopLiveCamera();
     if (ScreenMirror) ScreenMirror.stopLiveView();

@@ -10,6 +10,11 @@ import com.facebook.soloader.SoLoader;
 import java.util.List;
 
 public class MainApplication extends Application implements ReactApplication {
+    private static com.facebook.react.bridge.ReactApplicationContext reactContext;
+    
+    public static com.facebook.react.bridge.ReactApplicationContext getReactContext() {
+        return reactContext;
+    }
     private final ReactNativeHost mReactNativeHost = new DefaultReactNativeHost(this) {
         @Override
         public boolean getUseDeveloperSupport() { return BuildConfig.DEBUG; }
