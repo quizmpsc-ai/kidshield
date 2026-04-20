@@ -221,11 +221,11 @@
     </div>
     <div class="modal-field">
       <label>Bedtime Start (block phone after)</label>
-      <input type="time" id="bedtime-start" value="21:00" />
+      <input type="time" id="bedtime-start" value="" />
     </div>
     <div class="modal-field">
       <label>Bedtime End (unblock phone at)</label>
-      <input type="time" id="bedtime-end" value="07:00" />
+      <input type="time" id="bedtime-end" value="" />
     </div>
     <div class="modal-field">
       <label>Weekend limit different?</label>
@@ -361,7 +361,7 @@
           <h3 class="section-title" id="live-section-title">&#128249; Live Feed</h3>
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
-        <div class="stream-area" id="stream-area">
+        <div class="stream-area" id="stream-area">`n          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">🔇 Turn Audio ON</button>
           <p style="color:var(--muted)">Select a feature above to start monitoring</p>
         </div>
       </div>
@@ -510,7 +510,7 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('✅ Web Admin connected to Socket.io');
+        console.log('âœ… Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
@@ -518,6 +518,7 @@ auth.onAuthStateChanged(user => {
         // Only display if the frame matches the selected child and active feature
         if (data.childId === currentChildId && (data.type === currentLiveMode || (currentLiveMode === 'screen' && data.type === 'screen'))) {
           const streamArea = document.getElementById('stream-area');
+  document.getElementById('audio-toggle-btn').style.display = 'block';
           streamArea.innerHTML = '<img src="data:image/jpeg;base64,' + data.frameBase64 + '" style="max-width:100%;height:100%;object-fit:contain;border-radius:12px" />';
           const statusEl = document.getElementById('status-' + currentLiveMode);
           if (statusEl) { statusEl.textContent = 'Live'; statusEl.className = 'live-status on'; }
@@ -594,6 +595,39 @@ async function sendCommand(command, data = {}) {
 // ============================
 // LIVE MONITOR (SOCKET.IO LOGIC)
 // ============================
+let isAudioActive = false;
+
+function toggleAudioStream() {
+  if (!currentChildId) return;
+  isAudioActive = !isAudioActive;
+  const btn = document.getElementById('audio-toggle-btn');
+  
+  if (isAudioActive) {
+    btn.textContent = '🔊 Mute Audio';
+    btn.classList.replace('btn-primary', 'btn-danger');
+    sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
+  } else {
+    btn.textContent = '🔇 Turn Audio ON';
+    btn.classList.replace('btn-danger', 'btn-primary');
+    sendCommand('STOP_AUDIO_CAPTURE');
+  }
+}
+
+// Update socket logic to play audio
+if (!window.audioSocketInited) {
+    window.audioSocketInited = true;
+    setTimeout(() => {
+        if(socket) {
+            socket.on('receive_audio', data => {
+                if (isAudioActive && data.childId === currentChildId && data.audioBase64) {
+                    const snd = new Audio('data:audio/wav;base64,' + data.audioBase64);
+                    snd.play().catch(e => console.log('Audio play error:', e));
+                }
+            });
+        }
+    }, 2000);
+}
+
 function toggleLive(mode) {
   if (!currentChildId) { alert('Please select a child first'); return; }
   if (currentLiveMode === mode) { stopAllLive(); return; }
@@ -616,6 +650,7 @@ function toggleLive(mode) {
   document.getElementById('live-section-title').innerHTML = titles[mode] || 'Live Feed';
 
   const streamArea = document.getElementById('stream-area');
+  document.getElementById('audio-toggle-btn').style.display = 'block';
   streamArea.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Connecting via WebSockets...</p><p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open</p></div>';
 
   // Send Command to Child App
@@ -630,6 +665,9 @@ function toggleLive(mode) {
 }
 
 function stopAllLive() {
+  isAudioActive = false;
+  document.getElementById('audio-toggle-btn').style.display = 'none';
+  sendCommand('STOP_AUDIO_CAPTURE');
   if (currentLiveMode === 'screen') sendCommand('STOP_LIVE_VIEW');
   if (currentLiveMode === 'camera_back' || currentLiveMode === 'camera_front') sendCommand('STOP_LIVE_CAMERA');
   
@@ -899,8 +937,8 @@ async function unblockDomain(domain) { await db.collection('families').doc(curre
 
 function openTimeLimitModal() {
   document.getElementById('daily-limit-hours').value = currentChildData.dailyLimitHours || '';
-  document.getElementById('bedtime-start').value = currentChildData.bedtimeStart || '21:00';
-  document.getElementById('bedtime-end').value = currentChildData.bedtimeEnd || '07:00';
+  document.getElementById('bedtime-start').value = currentChildData.bedtimeStart || '';
+  document.getElementById('bedtime-end').value = currentChildData.bedtimeEnd || '';
   document.getElementById('modal-time-limit').classList.add('open');
 }
 function closeTimeLimitModal() { document.getElementById('modal-time-limit').classList.remove('open'); }
