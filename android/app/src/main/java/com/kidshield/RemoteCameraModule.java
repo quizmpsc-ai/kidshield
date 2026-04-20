@@ -24,7 +24,11 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     private ImageReader imageReader;
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
-    private boolean isLiveActive = false;
+    private boolean         isLiveActive = false;
+        try {
+            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
     private Runnable liveRunnable;
     private Handler liveHandler;
     private HandlerThread liveThread;
@@ -48,8 +52,17 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
         if (isLiveActive) { promise.resolve(true); return; }
         
-        isLiveActive = true;
+                isLiveActive = true;
         isFrontCameraActive = useFront;
+        // Start Foreground Service to satisfy Android 10+
+        try {
+            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+        } catch(Exception e) { e.printStackTrace(); }
         
         liveThread = new HandlerThread("LiveCameraThread");
         liveThread.start();
@@ -71,7 +84,11 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void stopLiveCamera(Promise promise) {
-        isLiveActive = false;
+                isLiveActive = false;
+        try {
+            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
         if (liveRunnable != null && liveHandler != null) {
             liveHandler.removeCallbacks(liveRunnable);
         }

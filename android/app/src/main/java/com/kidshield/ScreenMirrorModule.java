@@ -33,7 +33,11 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     private Handler handler;
     private static final int REQUEST_CODE = 1001;
     private Promise pendingPermissionPromise;
-    private boolean isMirroring = false;
+    private boolean         isMirroring = false;
+        try {
+            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
     private int screenWidth, screenHeight, screenDensity;
     private Runnable liveViewRunnable;
 
@@ -74,7 +78,17 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Need screen capture permission"); return; }
         if (isMirroring) { promise.resolve(true); return; }
 
-        isMirroring = true;
+                isMirroring = true;
+        // Start Foreground Service to satisfy Android 10+
+        try {
+            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+        } catch(Exception e) { e.printStackTrace(); }
+
         startBackgroundThread();
         setupVirtualDisplay();
 
@@ -94,7 +108,11 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
 
     @ReactMethod
     public void stopLiveView(Promise promise) {
-        isMirroring = false;
+                isMirroring = false;
+        try {
+            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
         if (liveViewRunnable != null && handler != null) {
             handler.removeCallbacks(liveViewRunnable);
         }
