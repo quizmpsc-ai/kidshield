@@ -1,8 +1,4 @@
-// android/app/src/main/java/com/kidshield/RemoteCameraModule.java
-// AirDroid-style remote camera snapshot
-
 package com.kidshield;
-
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
@@ -13,45 +9,42 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Base64;
 import android.view.Surface;
-
 import com.facebook.react.bridge.*;
-import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.auth.FirebaseAuth;
-
-import java.io.ByteArrayOutputStream;
+import com.google.firebase.firestore.FirebaseFirestore;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RemoteCameraModule extends ReactContextBaseJavaModule {
-
     private final ReactApplicationContext reactContext;
     private CameraDevice cameraDevice;
     private ImageReader imageReader;
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
-    private FirebaseFirestore db;
-    private String childId;
+    private String childId, parentId, childDocId;
 
     public RemoteCameraModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
-        this.db = FirebaseFirestore.getInstance();
+    }
+    @Override public String getName() { return "RemoteCamera"; }
+
+    @ReactMethod
+    public void setChildInfo(String cId, String pId, String docId, Promise promise) {
+        this.childId = cId; this.parentId = pId; this.childDocId = docId;
+        promise.resolve(true);
     }
 
-    @Override
-    public String getName() { return "RemoteCamera"; }
-
-    // ── Take snapshot and upload to Firebase ──
     @ReactMethod
     public void takeSnapshot(String requestId, Promise promise) {
-        try {
-            childId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            startBackgroundThread();
-            openCamera(requestId, promise);
-        } catch (Exception e) {
-            promise.reject("CAMERA_ERROR", e.getMessage());
-        }
+        openCamera(false, requestId, promise);
+    }
+
+    @ReactMethod
+    public void takeFrontSnapshot(String requestId, Promise promise) {
+        openCamera(true, requestId, promise);
     }
 
     private void startBackgroundThread() {
@@ -60,15 +53,22 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
         backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
-    private void openCamera(String requestId, Promise promise) {
-        CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
+    private void openCamera(boolean front, String requestId, Promise promise) {
         try {
-            // Back camera use करा
-            String cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-
-            // Image reader setup
-            imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 1);
+            if (childId == null && FirebaseAuth.getInstance().getCurrentUser() != null)
+                childId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+            startBackgroundThread();
+            CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
+            String cameraId = null;
+            for (String id : manager.getCameraIdList()) {
+                CameraCharacteristics chars = manager.getCameraCharacteristics(id);
+                Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+                if (front && facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) { cameraId = id; break; }
+                if (!front && facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) { cameraId = id; break; }
+            }
+            if (cameraId == null) cameraId = manager.getCameraIdList()[0];
+            int w = front ? 640 : 1280, h = front ? 480 : 720;
+            imageReader = ImageReader.newInstance(w, h, ImageFormat.JPEG, 1);
             imageReader.setOnImageAvailableListener(reader -> {
                 Image image = null;
                 try {
@@ -76,166 +76,63 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
-
-                    // Base64 encode
-                    String base64Image = Base64.encodeToString(bytes, Base64.DEFAULT);
-
-                    // Firebase वर upload
-                    uploadToFirebase(base64Image, requestId, promise);
-
-                } catch (Exception e) {
-                    promise.reject("CAPTURE_ERROR", e.getMessage());
-                } finally {
-                    if (image != null) image.close();
-                    stopCamera();
-                }
+                    String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                    uploadFrame("data:image/jpeg;base64," + base64, front ? "camera_front" : "camera_back", promise);
+                } catch (Exception e) { promise.reject("CAPTURE_ERROR", e.getMessage()); }
+                finally { if (image != null) image.close(); stopCamera(); }
             }, backgroundHandler);
-
-            // Camera open
-            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
-                @Override
-                public void onOpened(CameraDevice camera) {
-                    cameraDevice = camera;
-                    capturePhoto();
-                }
-                @Override
-                public void onDisconnected(CameraDevice camera) { camera.close(); }
-                @Override
-                public void onError(CameraDevice camera, int error) {
-                    camera.close();
-                    promise.reject("CAMERA_OPEN_ERROR", "Camera open failed: " + error);
-                }
+            final String finalId = cameraId;
+            manager.openCamera(finalId, new CameraDevice.StateCallback() {
+                @Override public void onOpened(CameraDevice camera) { cameraDevice = camera; capturePhoto(); }
+                @Override public void onDisconnected(CameraDevice camera) { camera.close(); }
+                @Override public void onError(CameraDevice camera, int error) { camera.close(); promise.reject("CAMERA_OPEN_ERROR", "Error: " + error); }
             }, backgroundHandler);
-
-        } catch (Exception e) {
-            promise.reject("CAMERA_ERROR", e.getMessage());
-        }
+        } catch (Exception e) { promise.reject("CAMERA_ERROR", e.getMessage()); }
     }
 
     private void capturePhoto() {
         try {
             SurfaceTexture texture = new SurfaceTexture(0);
-            texture.setDefaultBufferSize(1280, 720);
+            texture.setDefaultBufferSize(imageReader.getWidth(), imageReader.getHeight());
             Surface textureSurface = new Surface(texture);
             Surface readerSurface = imageReader.getSurface();
-
-            cameraDevice.createCaptureSession(
-                Arrays.asList(textureSurface, readerSurface),
+            cameraDevice.createCaptureSession(Arrays.asList(textureSurface, readerSurface),
                 new CameraCaptureSession.StateCallback() {
-                    @Override
-                    public void onConfigured(CameraCaptureSession session) {
+                    @Override public void onConfigured(CameraCaptureSession session) {
                         try {
-                            CaptureRequest.Builder builder =
-                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                             builder.addTarget(readerSurface);
                             builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
                             session.capture(builder.build(), null, backgroundHandler);
                         } catch (Exception e) { e.printStackTrace(); }
                     }
-                    @Override
-                    public void onConfigureFailed(CameraCaptureSession session) {}
-                },
-                backgroundHandler
-            );
+                    @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                }, backgroundHandler);
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    private void uploadToFirebase(String base64Image, String requestId, Promise promise) {
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss", Locale.getDefault())
-            .format(new Date());
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("childId", childId);
-        data.put("imageBase64", base64Image);
-        data.put("timestamp", timestamp);
-        data.put("requestId", requestId);
-        data.put("type", "camera_snapshot");
-
-        db.collection("remoteCaptures")
-            .add(data)
-            .addOnSuccessListener(ref -> {
-                promise.resolve(ref.getId());
-            })
-            .addOnFailureListener(e -> {
-                promise.reject("UPLOAD_ERROR", e.getMessage());
-            });
+    private void uploadFrame(String base64Frame, String type, Promise promise) {
+        try {
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+            Map<String, Object> data = new HashMap<>();
+            data.put("liveFrame", base64Frame);
+            data.put("liveFrameType", type);
+            data.put("liveFrameAt", com.google.firebase.Timestamp.now());
+            if (parentId != null && childDocId != null) {
+                db.collection("families").document(parentId)
+                    .collection("children").document(childDocId)
+                    .update(data)
+                    .addOnSuccessListener(v -> promise.resolve(true))
+                    .addOnFailureListener(e -> promise.reject("UPLOAD_ERROR", e.getMessage()));
+            } else {
+                if (childId != null) db.collection("remoteCaptures").document(childId).set(data);
+                promise.resolve(true);
+            }
+        } catch (Exception e) { promise.reject("UPLOAD_ERROR", e.getMessage()); }
     }
 
     private void stopCamera() {
-        if (cameraDevice != null) {
-            cameraDevice.close();
-            cameraDevice = null;
-        }
-        if (backgroundThread != null) {
-            backgroundThread.quitSafely();
-        }
-    }
-
-    // ── Front camera snapshot ──
-    @ReactMethod
-    public void takeFrontSnapshot(String requestId, Promise promise) {
-        try {
-            childId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            startBackgroundThread();
-            openFrontCamera(requestId, promise);
-        } catch (Exception e) {
-            promise.reject("CAMERA_ERROR", e.getMessage());
-        }
-    }
-
-    private void openFrontCamera(String requestId, Promise promise) {
-        CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
-        try {
-            String frontCameraId = null;
-            for (String id : manager.getCameraIdList()) {
-                CameraCharacteristics chars = manager.getCameraCharacteristics(id);
-                Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
-                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
-                    frontCameraId = id;
-                    break;
-                }
-            }
-            if (frontCameraId == null) {
-                promise.reject("NO_FRONT_CAMERA", "Front camera not found");
-                return;
-            }
-
-            imageReader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 1);
-            imageReader.setOnImageAvailableListener(reader -> {
-                Image image = null;
-                try {
-                    image = reader.acquireLatestImage();
-                    ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                    byte[] bytes = new byte[buffer.capacity()];
-                    buffer.get(bytes);
-                    String base64Image = Base64.encodeToString(bytes, Base64.DEFAULT);
-                    uploadToFirebase(base64Image, requestId, promise);
-                } catch (Exception e) {
-                    promise.reject("CAPTURE_ERROR", e.getMessage());
-                } finally {
-                    if (image != null) image.close();
-                    stopCamera();
-                }
-            }, backgroundHandler);
-
-            final String finalCameraId = frontCameraId;
-            manager.openCamera(finalCameraId, new CameraDevice.StateCallback() {
-                @Override
-                public void onOpened(CameraDevice camera) {
-                    cameraDevice = camera;
-                    capturePhoto();
-                }
-                @Override
-                public void onDisconnected(CameraDevice camera) { camera.close(); }
-                @Override
-                public void onError(CameraDevice camera, int error) {
-                    camera.close();
-                    promise.reject("CAMERA_OPEN_ERROR", "Camera open failed: " + error);
-                }
-            }, backgroundHandler);
-
-        } catch (Exception e) {
-            promise.reject("CAMERA_ERROR", e.getMessage());
-        }
+        if (cameraDevice != null) { cameraDevice.close(); cameraDevice = null; }
+        if (backgroundThread != null) { backgroundThread.quitSafely(); backgroundThread = null; }
     }
 }
