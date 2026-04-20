@@ -1,0 +1,2952 @@
+
+
+================================================
+=== FILE: App.js ===
+================================================
+
+import React, { useEffect, useRef, useState } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { ActivityIndicator, View } from 'react-native';
+
+import LoginScreen from './src/screens/auth/LoginScreen';
+import RegisterScreen from './src/screens/auth/RegisterScreen';
+import PairingScreen from './src/screens/auth/PairingScreen';
+import AppControl from './src/screens/parent/AppControl';
+import LocationTracker from './src/screens/parent/LocationTracker';
+import Reports from './src/screens/parent/Reports';
+import Settings from './src/screens/parent/Settings';
+import MultiChildDashboard from './src/screens/parent/MultiChildDashboard';
+import WeeklyReport from './src/screens/parent/WeeklyReport';
+import RemoteMonitor from './src/screens/parent/RemoteMonitor';
+import ChildHome from './src/screens/child/ChildHome';
+import { ErrorBoundary } from './src/services/ErrorHandler';
+
+const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+function ParentTabs() {
+  return (
+    <Tab.Navigator screenOptions={{
+      headerShown: false,
+      tabBarActiveTintColor: '#00d4ff',
+      tabBarInactiveTintColor: '#8899aa',
+      tabBarStyle: { backgroundColor: '#111d35', borderTopColor: '#1e2d4a' }
+    }}>
+      <Tab.Screen name="Dashboard" component={MultiChildDashboard} options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="Location" component={LocationTracker} options={{ tabBarLabel: 'Location' }} />
+      <Tab.Screen name="Apps" component={AppControl} options={{ tabBarLabel: 'Apps' }} />
+      <Tab.Screen name="Reports" component={Reports} options={{ tabBarLabel: 'Reports' }} />
+      <Tab.Screen name="Settings" component={Settings} options={{ tabBarLabel: 'Settings' }} />
+    </Tab.Navigator>
+  );
+}
+
+function ChildStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack.Screen name="ChildApp" component={ChildHome} />
+      <Stack.Screen name="Pairing" component={PairingScreen} />
+    </Stack.Navigator>
+  );
+}
+
+export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const navigationRef = useRef(null);
+
+  useEffect(() => {
+    const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const doc = await firestore().collection('users').doc(firebaseUser.uid).get();
+          if (doc.exists) {
+            setUserRole(doc.data()?.role || 'child');
+          } else {
+            setUserRole('child');
+          }
+        } catch (e) {
+          console.error('Role fetch error:', e);
+          setUserRole('child');
+        }
+        setUser(firebaseUser);
+      } else {
+        setUser(null);
+        setUserRole(null);
+      }
+      setInitializing(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060b14' }}>
+        <ActivityIndicator size="large" color="#00d4ff" />
+      </View>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <NavigationContainer ref={navigationRef}>
+        <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          {!user ? (
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="Pairing" component={PairingScreen} />
+            </>
+          ) : userRole === 'parent' ? (
+            <>
+              <Stack.Screen name="ParentApp" component={ParentTabs} />
+              <Stack.Screen name="WeeklyReport" component={WeeklyReport} />
+              <Stack.Screen name="RemoteMonitor" component={RemoteMonitor} />
+              <Stack.Screen name="Pairing" component={PairingScreen} />
+            </>
+          ) : (
+            <Stack.Screen name="ChildStack" component={ChildStack} />
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ErrorBoundary>
+  );
+}
+
+
+================================================
+=== FILE: index.js ===
+================================================
+
+import {AppRegistry} from 'react-native';
+import App from './App';
+import {name as appName} from './app.json';
+AppRegistry.registerComponent(appName, () => App);
+
+
+================================================
+=== FILE: src\services\RemoteCommandHandler.js ===
+================================================
+
+// src/services/RemoteCommandHandler.js Ã¢â‚¬â€ FIXED VERSION
+//
+// BUGS FIXED:
+// 1. childId field: data.childId Ã¢â€ â€™ user.uid (Firestore doc Ã Â¤Â®Ã Â¤Â§Ã Â¥ÂÃ Â¤Â¯Ã Â¥â€¡ childId field Ã Â¤Â¨Ã Â¤Â¸Ã Â¤Â¤Ã Â¥â€¹)
+// 2. Socket reconnection logic added
+// 3. NativeEventEmitter Ã¢â‚¬â€ module specify Ã Â¤â€¢Ã Â¥â€¡Ã Â¤Â²Ã Â¤Â¾ (warning fix)
+// 4. LOCK_DEVICE garbled string fixed
+// 5. ScreenMirror requestPermission Ã¢â‚¬â€ UI thread Ã Â¤ÂµÃ Â¤Â° run Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â£Ã Â¥â€¡ Ã Â¤â€”Ã Â¤Â°Ã Â¤Å“Ã Â¥â€¡Ã Â¤Å¡Ã Â¥â€¡
+
+import { NativeModules, NativeEventEmitter } from 'react-native';
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import io from 'socket.io-client';
+
+const { RemoteCamera, AmbientAudio, ScreenMirror } = NativeModules;
+const SOCKET_SERVER_URL = 'https://kidshield-0757.onrender.com';
+
+class RemoteCommandHandler {
+  constructor() {
+    this.isInitialized = false;
+    this.unsubscribe = null;
+    this.childId = null;
+    this.parentId = null;
+    this.socket = null;
+    this.screenListener = null;
+    this.cameraListener = null;
+    this.audioListener = null;
+    this.processingCommands = new Set(); // duplicate execution prevent
+  }
+
+  async init() {
+    try {
+      const user = auth().currentUser;
+      if (!user) { console.log('RemoteCommand: No user'); return; }
+
+      const doc = await firestore().collection('users').doc(user.uid).get();
+      if (!doc.exists) { console.log('RemoteCommand: User doc missing'); return; }
+
+      const data = doc.data();
+
+      // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX #5: childId correctly set Ã¢â€â‚¬Ã¢â€â‚¬
+      // Problem: data.childId (Firestore field) Ã Â¤Â¨Ã Â¥â€¡Ã Â¤Â¹Ã Â¤Â®Ã Â¥â‚¬ Ã Â¤â€¦Ã Â¤Â¸Ã Â¤Â¤ Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â¹Ã Â¥â‚¬
+      // Fix: user.uid Ã Â¤Â¹Ã Â¤Â¾Ã Â¤Å¡ childId Ã Â¤â€ Ã Â¤Â¹Ã Â¥â€¡
+            const data = doc.data();
+      this.parentId = data?.parentId || null;
+      let correctChildId = data?.childId || user.uid;
+      
+      if (this.parentId) {
+          try {
+              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
+              if (!childSnap.empty) {
+                  correctChildId = childSnap.docs[0].id;
+                  await firestore().collection('users').doc(user.uid).update({ childId: correctChildId }).catch(()=>{});
+              }
+          } catch(e) { console.log("AutoHeal Error:", e); }
+      }
+      this.childId = correctChildId;
+
+      console.log(`RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
+
+      if (!this.parentId) {
+        console.log('RemoteCommand: No parent linked yet Ã¢â‚¬â€ skipping');
+        return;
+      }
+
+      // Ã¢â€â‚¬Ã¢â€â‚¬ SOCKET CONNECT Ã¢â€â‚¬Ã¢â€â‚¬
+      this._connectSocket();
+
+      // Ã¢â€â‚¬Ã¢â€â‚¬ NATIVE EVENT LISTENERS Ã¢â€â‚¬Ã¢â€â‚¬
+      this._attachNativeListeners();
+
+      // Ã¢â€â‚¬Ã¢â€â‚¬ SET NATIVE INFO Ã¢â€â‚¬Ã¢â€â‚¬
+      if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId).catch(() => {});
+      if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId).catch(() => {});
+      if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId).catch(() => {});
+
+      // Ã¢â€â‚¬Ã¢â€â‚¬ FIRESTORE COMMAND LISTENER Ã¢â€â‚¬Ã¢â€â‚¬
+      this._attachCommandListener();
+
+      this.isInitialized = true;
+      console.log('Ã¢Å“â€¦ RemoteCommandHandler Ready!');
+
+    } catch (err) {
+      console.log('Ã¢ÂÅ’ RemoteCommand Init Error:', err);
+    }
+  }
+
+  _connectSocket() {
+    if (this.socket?.connected) return;
+
+    this.socket = io(SOCKET_SERVER_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000,
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Ã¢Å“â€¦ Child Socket Connected:', this.socket.id);
+      this.socket.emit('join_room', { parentId: this.parentId });
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+    });
+
+    this.socket.on('connect_error', (err) => {
+      console.log('Socket error:', err.message);
+    });
+  }
+
+  _attachNativeListeners() {
+    // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: NativeEventEmitter Ã Â¤Â²Ã Â¤Â¾ module pass Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â¾ Ã¢â€â‚¬Ã¢â€â‚¬
+    // Problem: NativeEventEmitter() without module Ã¢â€ â€™ Yellow warning
+    const screenEmitter = ScreenMirror ? new NativeEventEmitter(ScreenMirror) : null;
+    const cameraEmitter = RemoteCamera ? new NativeEventEmitter(RemoteCamera) : null;
+    const audioEmitter  = AmbientAudio ? new NativeEventEmitter(AmbientAudio)  : null;
+
+    // Screen frames
+    if (this.screenListener) this.screenListener.remove();
+    if (screenEmitter) {
+      this.screenListener = screenEmitter.addListener('onScreenFrame', (base64Frame) => {
+        if (this.socket?.connected && this.parentId) {
+          this.socket.emit('stream_frame', {
+            parentId: this.parentId,
+            childId: this.childId,
+            frameBase64: base64Frame,
+            type: 'screen',
+          });
+        }
+      });
+    }
+
+    // Camera frames
+    if (this.cameraListener) this.cameraListener.remove();
+    if (cameraEmitter) {
+      this.cameraListener = cameraEmitter.addListener('onCameraFrame', (event) => {
+        if (this.socket?.connected && this.parentId) {
+          this.socket.emit('stream_frame', {
+            parentId: this.parentId,
+            childId: this.childId,
+            frameBase64: event.frame,
+            type: event.type, // 'camera_back' or 'camera_front'
+          });
+        }
+      });
+    }
+
+    // Audio frames
+    if (this.audioListener) this.audioListener.remove();
+    if (audioEmitter) {
+      this.audioListener = audioEmitter.addListener('onAudioFrame', (base64Audio) => {
+        if (this.socket?.connected && this.parentId) {
+          this.socket.emit('stream_audio', {
+            parentId: this.parentId,
+            childId: this.childId,
+            audioBase64: base64Audio,
+          });
+        }
+      });
+    }
+  }
+
+  _attachCommandListener() {
+    if (this.unsubscribe) this.unsubscribe();
+
+    console.log('Attaching command listener for childId:', this.childId);
+
+    this.unsubscribe = firestore()
+      .collection('commands')
+      .where('childId', '==', this.childId)
+      .where('status', '==', 'pending')
+      .onSnapshot(
+        snap => {
+          console.log(`Commands received: ${snap.docs.length}`);
+          snap.docs.forEach(doc => {
+            const cmdId = doc.id;
+            // Ã¢â€â‚¬Ã¢â€â‚¬ Duplicate execution prevent Ã¢â€â‚¬Ã¢â€â‚¬
+            if (this.processingCommands.has(cmdId)) return;
+            this.processingCommands.add(cmdId);
+            this.handleCommand(cmdId, doc.data());
+          });
+        },
+        error => {
+          console.log('Command listener error:', error.code, error.message);
+        }
+      );
+  }
+
+  async handleCommand(commandId, commandData) {
+    const { command, data = {} } = commandData;
+    console.log('Executing command:', command, data);
+
+    try {
+      // Status Ã¢â€ â€™ processing
+      await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
+
+      switch (command) {
+
+        case 'START_LIVE_CAMERA':
+          if (RemoteCamera) {
+            await RemoteCamera.startLiveCamera(
+              data.useFront === true,
+              data.intervalSeconds || 1
+            );
+          }
+          break;
+
+        case 'STOP_LIVE_CAMERA':
+          if (RemoteCamera) await RemoteCamera.stopLiveCamera();
+          break;
+
+        case 'START_AUDIO_CAPTURE':
+          if (AmbientAudio) {
+            await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          }
+          break;
+
+        case 'STOP_AUDIO_CAPTURE':
+          if (AmbientAudio) await AmbientAudio.stopAmbientCapture();
+          break;
+
+        case 'START_LIVE_VIEW':
+          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Screen Mirror permission UI thread Ã Â¤ÂµÃ Â¤Â° Ã¢â€â‚¬Ã¢â€â‚¬
+          if (ScreenMirror) {
+            try {
+              await ScreenMirror.requestPermission();
+              await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+            } catch (e) {
+              console.log('ScreenMirror error:', e.message);
+              // Permission denied Ã¢â€ â€™ status failed
+              await firestore().collection('commands').doc(commandId).update({
+                status: 'failed',
+                error: 'Screen permission denied: ' + e.message,
+              });
+              this.processingCommands.delete(commandId);
+              return;
+            }
+          }
+          break;
+
+        case 'STOP_LIVE_VIEW':
+          if (ScreenMirror) await ScreenMirror.stopLiveView();
+          break;
+
+        case 'LOCK_DEVICE':
+          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Garbled string fixed Ã¢â€â‚¬Ã¢â€â‚¬
+          const { Alert } = require('react-native');
+          Alert.alert(
+            'Ã°Å¸â€â€™ Phone Locked',
+            'Parent has locked this device.',
+            [{ text: 'OK' }],
+            { cancelable: false }
+          );
+          break;
+
+        case 'UPDATE_RULES':
+          // App rules reload trigger
+          const { ChildMonitorService } = require('./ChildMonitorService');
+          if (ChildMonitorService?.loadAppRules) {
+            await ChildMonitorService.loadAppRules();
+          }
+          break;
+
+        default:
+          console.log('Unknown command:', command);
+      }
+
+      // Status Ã¢â€ â€™ executed
+      await firestore().collection('commands').doc(commandId).update({
+        status: 'executed',
+        executedAt: firestore.FieldValue.serverTimestamp(),
+      });
+
+    } catch (error) {
+      console.log('Command error:', command, error.message);
+      await firestore().collection('commands').doc(commandId).update({
+        status: 'failed',
+        error: error.message,
+      }).catch(() => {});
+    } finally {
+      // Processing set Ã Â¤Â®Ã Â¤Â§Ã Â¥â€šÃ Â¤Â¨ Ã Â¤â€¢Ã Â¤Â¾Ã Â¤Â¢Ã Â¤Â¾
+      setTimeout(() => this.processingCommands.delete(commandId), 5000);
+    }
+  }
+
+  destroy() {
+    if (this.unsubscribe) this.unsubscribe();
+    if (this.screenListener) this.screenListener.remove();
+    if (this.cameraListener) this.cameraListener.remove();
+    if (this.audioListener) this.audioListener.remove();
+    if (this.socket) this.socket.disconnect();
+    if (RemoteCamera) RemoteCamera.stopLiveCamera().catch(() => {});
+    if (ScreenMirror) ScreenMirror.stopLiveView().catch(() => {});
+    if (AmbientAudio) AmbientAudio.stopAmbientCapture().catch(() => {});
+    this.isInitialized = false;
+    this.processingCommands.clear();
+    console.log('RemoteCommandHandler destroyed');
+  }
+}
+
+export default new RemoteCommandHandler();
+
+
+================================================
+=== FILE: src\services\ChildMonitorService.js ===
+================================================
+
+import { NativeModules, AppState } from 'react-native';
+import BackgroundFetch from 'react-native-background-fetch';
+import Geolocation from '@react-native-community/geolocation';
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import axios from 'axios';
+import RemoteCommandHandler from './RemoteCommandHandler';
+
+const { UsageStats } = NativeModules;
+const API_URL = 'https://kidshield-0757.onrender.com';
+
+class ChildMonitorService {
+  constructor() {
+    this.childId = null;
+    this.parentId = null;
+    this.childDocId = null;
+    this.appRules = {};
+    this.locationInterval = null;
+  }
+
+  async init() {
+    this.childId = auth().currentUser?.uid;
+    if (!this.childId) return;
+
+    // Get parentId from users collection
+    try {
+      const userDoc = await firestore().collection('users').doc(this.childId).get();
+            this.parentId = userDoc.data()?.parentId;
+      let correctChildId = userDoc.data()?.childId || this.childId;
+      if (this.parentId) {
+          try {
+              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
+              if (!childSnap.empty) correctChildId = childSnap.docs[0].id;
+          } catch(e) {}
+      }
+      this.childDocId = correctChildId;
+    console.log('ChildMonitor init: UID=', this.childId, ' DocID=', this.childDocId);
+    } catch (e) {}
+
+    await this.loadAppRules();
+    this.listenForCommands();
+    RemoteCommandHandler.init(); // Ã°Å¸â€Â¥ FORCED INIT Ã°Å¸â€Â¥
+    this.startLocationTracking();
+    this.startUsageReporting();
+    this.setupBackgroundFetch();
+    this.updateOnlineStatus(true);
+
+    console.log('KidShield monitoring started');
+  }
+
+  async updateOnlineStatus(online) {
+    if (!this.parentId || !this.childDocId) return;
+    try {
+      await firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .set({ deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() });
+    } catch (e) {}
+  }
+
+  async loadAppRules() {
+    try {
+      const snap = await firestore().collection('appRules')
+        .where('childId', '==', (this.childDocId || this.childId)).get();
+      this.appRules = {};
+      snap.docs.forEach(d => { this.appRules[d.data().packageName] = d.data(); });
+    } catch (e) {}
+  }
+
+  listenForCommands() {
+    // Listen on families collection (web admin sends commands here)
+    if (this.parentId && this.childDocId) {
+      firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .onSnapshot(doc => {
+          const data = doc.data() || {};
+          const cmd = data.liveCommand;
+          if (cmd && cmd !== 'stop' && cmd !== this.lastCommand) {
+            this.lastCommand = cmd;
+            this.handleLiveCommand(cmd, data);
+          }
+        });
+    }
+
+    // (Commands listener removed to prevent race condition with RemoteCommandHandler)
+  }
+
+  async handleLiveCommand(command, data) {
+    const { RemoteCamera, AmbientAudio, ScreenMirror } = require('react-native').NativeModules;
+    try {
+      if (command === 'screen' && ScreenMirror) {
+        await ScreenMirror.takeScreenshot('live');
+      } else if (command === 'camera' && RemoteCamera) {
+        await RemoteCamera.takeFrontSnapshot('live');
+      } else if (command === 'audio' && AmbientAudio) {
+        await AmbientAudio.startAmbientCapture('live');
+      }
+    } catch (e) {
+      console.log('Live command failed:', e.message);
+    }
+  }
+
+  
+
+  startLocationTracking() {
+    this.reportLocation();
+    this.locationInterval = setInterval(() => this.reportLocation(), 5 * 60 * 1000);
+  }
+
+  async reportLocation() {
+    return new Promise((resolve) => {
+      Geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            // Save to locations collection
+            await firestore().collection('locations').doc(this.childId).set({
+              lat: latitude, lng: longitude,
+              updatedAt: firestore.FieldValue.serverTimestamp(),
+            });
+
+            // Save to families collection (web admin reads from here)
+            if (this.parentId && this.childDocId) {
+              await firestore()
+                .collection('families').doc(this.parentId)
+                .collection('children').doc(this.childDocId)
+                .set({
+                  location: { lat: latitude, lng: longitude },
+                  locationName: latitude.toFixed(4) + ', ' + longitude.toFixed(4),
+                  locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
+                });
+            }
+
+            // Also send to backend
+            await axios.post(API_URL + '/api/location/update', {
+              childId: this.childId,
+              parentId: this.parentId,
+              latitude, longitude,
+            }).catch(() => {});
+          } catch (e) {}
+          resolve();
+        },
+        () => resolve(),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    });
+  }
+
+  startUsageReporting() {
+    // Run immediately on start
+    this.syncRealDeviceData();
+    
+    // Sync every 60 seconds
+    setInterval(() => {
+      this.syncRealDeviceData();
+    }, 60 * 1000);
+  }
+
+    async reportSystemError(errorType, message) {
+    if (!this.parentId || !this.childDocId) return;
+    try {
+      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId).collection('alerts').add({
+        type: 'system_error',
+        message: `[${errorType}] ${message}`,
+        timestamp: firestore.FieldValue.serverTimestamp()
+      });
+    } catch(e) {}
+  }
+
+  async syncRealDeviceData() {
+    if (!this.parentId || !this.childDocId) return;
+    const { UsageStats, BatteryModule, KidShieldModule } = NativeModules;
+
+    // 1. SCREEN TIME SYNC
+    try {
+      const hasPermission = await UsageStats?.hasUsagePermission();
+      if (hasPermission) {
+        const usageData = await UsageStats.getTodayUsage();
+        await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
+          .update({
+            todayMinutes: usageData.totalMinutes || 0,
+            lastSync: firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+      }
+    } catch(e) { this.reportSystemError("Usage Stats", e.message); }
+
+    // 2. REAL BATTERY SYNC
+    try {
+      let batteryLevel = 100;
+      if (BatteryModule && BatteryModule.getBatteryLevel) {
+        const levelStr = await BatteryModule.getBatteryLevel();
+        batteryLevel = parseInt(levelStr) || 100;
+      }
+      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
+        .update({
+          battery: batteryLevel,
+          deviceOnline: true,
+          lastSeen: firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch(e) { this.reportSystemError("Battery Sync", e.message); }
+
+    // 3. REAL INSTALLED APPS SYNC
+    try {
+      if (KidShieldModule && KidShieldModule.getInstalledApps) {
+        const realApps = await KidShieldModule.getInstalledApps();
+        const batch = firestore().batch();
+        const appsRef = firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId).collection('installed_apps');
+        
+        realApps.forEach(app => {
+          const appData = {
+            id: app.packageName,
+            appName: app.appName,
+            packageName: app.packageName,
+            updatedAt: firestore.FieldValue.serverTimestamp()
+          };
+          // { merge: true } keeps existing "blocked" status intact
+          batch.set(appsRef.doc(app.packageName), appData, { merge: true });
+        });
+        await batch.commit();
+      }
+    } catch(e) { this.reportSystemError("App Sync", e.message); }
+  }
+
+  setupBackgroundFetch() {
+    try {
+      BackgroundFetch.configure({
+        minimumFetchInterval: 15,
+        stopOnTerminate: false,
+        startOnBoot: true,
+        enableHeadless: true,
+      }, async (taskId) => {
+        await this.reportLocation();
+        BackgroundFetch.finish(taskId);
+      });
+    } catch (e) {}
+  }
+
+  stop() {
+    if (this.locationInterval) clearInterval(this.locationInterval);
+    this.updateOnlineStatus(false);
+    try { BackgroundFetch.stop(); } catch (e) {}
+  }
+}
+
+export default new ChildMonitorService();
+
+
+================================================
+=== FILE: src\screens\child\ChildHome.js ===
+================================================
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, Alert, Animated, Vibration, NativeModules,
+} from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import Geolocation from '@react-native-community/geolocation';
+
+const API_URL = 'https://kidshield-0757.onrender.com';
+const { BatteryModule, AppHider, UsageStats } = NativeModules;
+
+export default function ChildHome({ navigation }) {
+  const [screenTime, setScreenTime] = useState(0);
+  const [limit, setLimit] = useState(120);
+  const [childName, setChildName] = useState('Child');
+  const [parentId, setParentId] = useState(null);
+  const [childDocId, setChildDocId] = useState(null);
+  const [sosActive, setSosActive] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [battery, setBattery] = useState(null);
+  const [adminEnabled, setAdminEnabled] = useState(false);
+  const sosAnim = useRef(new Animated.Value(1)).current;
+  const screenTimeRef = useRef(0);
+  const blockedRef = useRef(0);
+
+  useEffect(() => {
+    loadChildData();
+    startLocationTracking();
+    startBatteryTracking();
+    startScreenTimeTracking();
+  }, []);
+
+  // â”€â”€ Child data load à¤•à¤°à¤¾ â”€â”€
+  const loadChildData = async () => {
+    try {
+      const uid = auth().currentUser?.uid;
+      if (!uid) return;
+      const doc = await firestore().collection('users').doc(uid).get();
+      if (doc.exists) {
+        const data = doc.data();
+                setChildName(data.name || 'Child');
+        setParentId(data.parentId || null);
+        let correctId = data.childId;
+        if (data.parentId) {
+            try {
+                const snap = await firestore().collection('families').doc(data.parentId).collection('children').limit(1).get();
+                if (!snap.empty) correctId = snap.docs[0].id;
+            } catch(e){}
+        }
+        setChildDocId(correctId || null);
+        setLimit(data.screenTimeLimit || 120);
+        screenTimeRef.current = data.screenTime || 0;
+        setScreenTime(data.screenTime || 0);
+
+        // Admin check
+        if (AppHider) {
+          const isAdmin = await AppHider.isDeviceAdminActive();
+          setAdminEnabled(isAdmin);
+        }
+      }
+    } catch (e) { console.error('Load error:', e); }
+  };
+
+  // â”€â”€ Battery tracking â”€â”€
+  const startBatteryTracking = async () => {
+    const updateBattery = async () => {
+      try {
+        if (BatteryModule) {
+          const level = await BatteryModule.getBatteryLevel();
+          setBattery(level);
+          return level;
+        }
+      } catch (e) {}
+      return null;
+    };
+
+    // Immediately fetch
+    const level = await updateBattery();
+
+    // à¤¹à¤° 5 minutes update à¤•à¤°à¤¾
+    setInterval(updateBattery, 5 * 60 * 1000);
+    return level;
+  };
+
+  // â”€â”€ Screen time tracking â”€â”€
+  const startScreenTimeTracking = () => {
+    const interval = setInterval(async () => {
+      screenTimeRef.current += 1;
+      setScreenTime(screenTimeRef.current);
+
+      // à¤¹à¤° 5 minutes Firebase à¤²à¤¾ push à¤•à¤°à¤¾
+      if (screenTimeRef.current % 5 === 0) {
+        await pushDataToFirebase();
+      }
+    }, 60000); // 1 minute
+
+    // à¤ªà¤¹à¤¿à¤²à¥à¤¯à¤¾à¤‚à¤¦à¤¾ 30 seconds à¤¨à¤‚à¤¤à¤° push à¤•à¤°à¤¾
+    setTimeout(() => pushDataToFirebase(), 30000);
+
+    return () => clearInterval(interval);
+  };
+
+  // â”€â”€ à¤¸à¤—à¤³à¤¾ data Firebase families collection à¤®à¤§à¥à¤¯à¥‡ push à¤•à¤°à¤¾ â”€â”€
+  const pushDataToFirebase = async () => {
+    try {
+      const uid = auth().currentUser?.uid;
+      if (!uid || !parentId) return;
+
+      // Battery get à¤•à¤°à¤¾
+      let batteryLevel = battery;
+      if (BatteryModule && batteryLevel === null) {
+        batteryLevel = await BatteryModule.getBatteryLevel();
+        setBattery(batteryLevel);
+      }
+
+      // Usage stats (if available)
+      let usageApps = [];
+      try {
+        if (UsageStats) {
+          const hasPerms = await UsageStats.hasUsagePermission();
+          if (hasPerms) {
+            const usage = await UsageStats.getTodayUsage();
+            usageApps = usage.apps || [];
+          }
+        }
+      } catch (e) {}
+
+      const now = new Date();
+      const updateData = {
+        // Screen time
+        screenTime: screenTimeRef.current,
+        screenTimeMinutes: screenTimeRef.current,
+
+        // Battery â€” real device data
+        battery: batteryLevel !== null ? batteryLevel : null,
+        batteryLevel: batteryLevel !== null ? batteryLevel : null,
+
+        // Blocked attempts
+        blockedAttempts: blockedRef.current,
+
+        // Status
+        isOnline: true,
+        lastSeen: firestore.FieldValue.serverTimestamp(),
+        lastUpdated: firestore.FieldValue.serverTimestamp(),
+
+        // App usage
+        appsUsed: usageApps.length,
+        topApps: usageApps.slice(0, 5),
+      };
+
+      // 1. families/{parentId}/children/{childDocId} update à¤•à¤°à¤¾ (Web Admin à¤¸à¤¾à¤ à¥€)
+      if (childDocId) {
+        await firestore()
+          .collection('families')
+          .doc(parentId)
+          .collection('children')
+          .doc(childDocId)
+          .set(updateData, { merge: true });
+      }
+
+      // 2. users/{uid} à¤ªà¤£ update à¤•à¤°à¤¾ (Android app à¤¸à¤¾à¤ à¥€)
+      await firestore().collection('users').doc(uid).update({
+        screenTime: screenTimeRef.current,
+        battery: batteryLevel,
+        isOnline: true,
+        lastActive: firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log('Data pushed:', { screenTime: screenTimeRef.current, battery: batteryLevel });
+
+    } catch (e) {
+      console.error('Push error:', e);
+    }
+  };
+
+  // â”€â”€ Location tracking â”€â”€
+  const startLocationTracking = () => {
+    Geolocation.requestAuthorization();
+    Geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setLocation({ latitude, longitude, accuracy });
+        sendLocationToFirebase(latitude, longitude, accuracy);
+      },
+      (err) => console.log('GPS error:', err),
+      { enableHighAccuracy: false, distanceFilter: 50, interval: 120000 }
+    );
+
+    // Initial position
+    Geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setLocation({ latitude, longitude, accuracy });
+        sendLocationToFirebase(latitude, longitude, accuracy);
+      },
+      (err) => console.log('Initial GPS error:', err),
+      { enableHighAccuracy: false, timeout: 15000 }
+    );
+  };
+
+  const sendLocationToFirebase = async (lat, lng, accuracy) => {
+    try {
+      const uid = auth().currentUser?.uid;
+      if (!uid || !parentId) return;
+
+      // Reverse geocoding (simple)
+      let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          { headers: { 'User-Agent': 'KidShield/1.0' } }
+        );
+        const data = await resp.json();
+        if (data?.display_name) {
+          const parts = data.display_name.split(',');
+          locationName = parts.slice(0, 3).join(',').trim();
+        }
+      } catch (e) {}
+
+      const locationData = {
+        location: { lat, lng, accuracy },
+        locationName,
+        locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
+        lat, lng, // backward compat
+      };
+
+      // 1. families collection update (Web Admin)
+      if (childDocId) {
+        await firestore()
+          .collection('families').doc(parentId)
+          .collection('children').doc(childDocId)
+          .set(locationData, { merge: true });
+      }
+
+      // 2. locations collection (separate real-time tracking)
+      await firestore().collection('locations').doc(uid).set({
+        lat, lng, accuracy, childId: uid, parentId,
+        locationName,
+        timestamp: firestore.FieldValue.serverTimestamp(),
+      });
+
+    } catch (e) { console.error('Location error:', e); }
+  };
+
+  // â”€â”€ SOS â”€â”€
+  const handleSOSPress = () => {
+    Vibration.vibrate([0, 200, 100, 200]);
+    Animated.sequence([
+      Animated.timing(sosAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+      Animated.timing(sosAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+    Alert.alert('SOS Alert', 'Send emergency alert to parent?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Send SOS', style: 'destructive', onPress: sendSOS },
+    ]);
+  };
+
+  const sendSOS = async () => {
+    try {
+      setSosActive(true);
+      const uid = auth().currentUser?.uid;
+
+      // Location à¤ªà¤£ include à¤•à¤°à¤¾
+      if (location) {
+        await sendLocationToFirebase(location.latitude, location.longitude, location.accuracy);
+      }
+
+      // Alert firestore à¤®à¤§à¥à¤¯à¥‡
+      await firestore().collection('alerts').add({
+        childId: uid,
+        childName,
+        parentId,
+        title: 'SOS Alert!',
+        body: `${childName} needs help!`,
+        message: `${childName} needs help!`,
+        type: 'SOS',
+        severity: 'high',
+        read: false,
+        timestamp: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        location: location ? { lat: location.latitude, lng: location.longitude } : null,
+      });
+
+      // families à¤®à¤§à¥à¤¯à¥‡ recent activity add à¤•à¤°à¤¾
+      if (childDocId && parentId) {
+        await firestore()
+          .collection('families').doc(parentId)
+          .collection('children').doc(childDocId)
+          .collection('activity').add({
+            type: 'SOS',
+            description: 'SOS button pressed',
+            timestamp: firestore.FieldValue.serverTimestamp(),
+          });
+      }
+
+      // Backend notify à¤•à¤°à¤¾
+      try {
+        await fetch(`${API_URL}/api/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parentId,
+            title: 'SOS Alert!',
+            body: `${childName} needs help immediately!`,
+            data: { type: 'SOS', childId: uid }
+          }),
+        });
+      } catch (e) {}
+
+      Alert.alert('SOS Sent', 'Your parent has been notified!');
+    } catch (e) {
+      Alert.alert('Error', 'Could not send SOS. Check internet.');
+    } finally { setSosActive(false); }
+  };
+
+  const percentage = Math.min((screenTime / limit) * 100, 100);
+  const timeLeft = Math.max(limit - screenTime, 0);
+  const isNearLimit = percentage >= 80;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#060b14' }}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.greeting}>Hello, {childName}!</Text>
+          <Text style={styles.date}>{new Date().toDateString()}</Text>
+        </View>
+
+        {!parentId && (
+          <TouchableOpacity style={styles.linkBanner}
+            onPress={() => navigation.navigate('Pairing')}>
+            <Text style={styles.linkBannerIcon}>ðŸ”—</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkBannerTitle}>Link to Parent</Text>
+              <Text style={styles.linkBannerText}>Tap to enter pairing code</Text>
+            </View>
+            <Text style={{ color: '#00d4ff', fontSize: 20 }}>â†’</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Screen Time Card */}
+        <View style={[styles.card, isNearLimit && styles.cardWarning]}>
+          <Text style={styles.cardLabel}>Today Screen Time</Text>
+          <Text style={styles.timeValue}>
+            {Math.floor(screenTime / 60)}h {screenTime % 60}m
+            <Text style={styles.timeLimit}> / {Math.floor(limit / 60)}h {limit % 60}m</Text>
+          </Text>
+          <View style={styles.progressBg}>
+            <View style={[styles.progressFill,
+              { width: `${percentage}%` },
+              isNearLimit && { backgroundColor: '#ff4444' }
+            ]} />
+          </View>
+          <Text style={[styles.timeLeftText, isNearLimit && { color: '#ff4444' }]}>
+            {isNearLimit ? `Warning: Only ${timeLeft} min left!` : `${timeLeft} min remaining`}
+          </Text>
+        </View>
+
+        {/* Status Row */}
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Status</Text>
+          <View style={styles.statusRow}>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusIcon}>ðŸ”‹</Text>
+              <Text style={styles.statusText}>{battery !== null ? `${battery}%` : '...'}</Text>
+              <Text style={styles.statusLabel}>Battery</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusIcon}>ðŸ“</Text>
+              <Text style={styles.statusText}>{location ? 'Active' : 'Pending'}</Text>
+              <Text style={styles.statusLabel}>Location</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusIcon}>{adminEnabled ? 'ðŸ”’' : 'ðŸ›¡ï¸'}</Text>
+              <Text style={styles.statusText}>{adminEnabled ? 'Protected' : 'Basic'}</Text>
+              <Text style={styles.statusLabel}>Security</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusIcon}>{parentId ? 'âœ…' : 'âŒ'}</Text>
+              <Text style={styles.statusText}>{parentId ? 'Linked' : 'Not Linked'}</Text>
+              <Text style={styles.statusLabel}>Parent</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* SOS Button */}
+        <View style={styles.sosContainer}>
+          <Text style={styles.sosLabel}>Emergency:</Text>
+          <Animated.View style={{ transform: [{ scale: sosAnim }] }}>
+            <TouchableOpacity
+              style={[styles.sosBtn, sosActive && { opacity: 0.6 }]}
+              onPress={handleSOSPress} disabled={sosActive} activeOpacity={0.8}>
+              <Text style={styles.sosIcon}>ðŸ†˜</Text>
+              <Text style={styles.sosBtnText}>SOS</Text>
+              <Text style={styles.sosSubText}>Press to alert parent</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>â„¹ï¸ KidShield Active</Text>
+          <Text style={styles.infoText}>â€¢ Location shared with parent</Text>
+          <Text style={styles.infoText}>â€¢ Screen time: {screenTime} minutes today</Text>
+          <Text style={styles.infoText}>â€¢ Battery: {battery !== null ? `${battery}%` : 'reading...'}</Text>
+          <Text style={styles.infoText}>â€¢ To open hidden app: dial *#1234#</Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
+  header: { marginBottom: 16 },
+  greeting: { fontSize: 26, fontWeight: '700', color: '#ffffff', marginBottom: 4 },
+  date: { fontSize: 13, color: '#8899aa' },
+  linkBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(0,212,255,0.08)', borderRadius: 14, padding: 16,
+    marginBottom: 16, borderWidth: 1.5, borderColor: '#00d4ff',
+  },
+  linkBannerIcon: { fontSize: 24 },
+  linkBannerTitle: { fontSize: 15, fontWeight: '700', color: '#00d4ff', marginBottom: 2 },
+  linkBannerText: { fontSize: 12, color: '#8899aa' },
+  card: {
+    backgroundColor: '#111d35', borderRadius: 16, padding: 20,
+    marginBottom: 16, borderWidth: 1, borderColor: '#1e2d4a',
+  },
+  cardWarning: { borderColor: '#ff4444' },
+  cardLabel: { fontSize: 13, color: '#8899aa', marginBottom: 10, fontWeight: '600' },
+  timeValue: { fontSize: 36, fontWeight: '700', color: '#00d4ff', marginBottom: 12 },
+  timeLimit: { fontSize: 18, color: '#8899aa' },
+  progressBg: { height: 8, backgroundColor: '#1e2d4a', borderRadius: 4, marginBottom: 8 },
+  progressFill: { height: 8, backgroundColor: '#00d4ff', borderRadius: 4 },
+  timeLeftText: { fontSize: 13, color: '#00d4ff' },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
+  statusItem: { alignItems: 'center' },
+  statusIcon: { fontSize: 24, marginBottom: 4 },
+  statusText: { fontSize: 13, color: '#ffffff', fontWeight: '600' },
+  statusLabel: { fontSize: 11, color: '#8899aa', marginTop: 2 },
+  sosContainer: { alignItems: 'center', marginVertical: 20 },
+  sosLabel: { fontSize: 13, color: '#8899aa', marginBottom: 16 },
+  sosBtn: {
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: '#1a0000', borderWidth: 3, borderColor: '#ff0000',
+    alignItems: 'center', justifyContent: 'center', elevation: 8,
+  },
+  sosIcon: { fontSize: 36, marginBottom: 4 },
+  sosBtnText: { fontSize: 22, fontWeight: '700', color: '#ff0000' },
+  sosSubText: { fontSize: 10, color: '#ff6666', marginTop: 2 },
+  infoCard: {
+    backgroundColor: '#0a1628', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#1e2d4a',
+  },
+  infoTitle: { fontSize: 15, fontWeight: '700', color: '#ffffff', marginBottom: 10 },
+  infoText: { fontSize: 13, color: '#8899aa', marginBottom: 6 },
+});
+
+
+================================================
+=== FILE: kidshield-backend\server.js ===
+================================================
+
+const express = require('express');
+const admin = require('firebase-admin');
+const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
+require('dotenv').config();
+
+const app = express();
+const server = http.createServer(app);
+
+// Initialize Socket.io with max buffer size for images/audio
+const io = new Server(server, {
+  cors: { origin: '*' },
+  maxHttpBufferSize: 1e8 // 100MB max per frame
+});
+
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+const db = admin.firestore();
+
+app.get('/health', (req, res) => res.json({ status: 'KidShield API running', version: '1.3 (WebSockets Enabled)' }));
+
+// === EXISTING REST APIs ===
+app.post('/api/pair/generate', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    const parentId = decoded.uid;
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    await db.collection('pairingCodes').doc(code).set({
+      parentId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+    res.json({ success: true, code });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/pair/validate', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'code required' });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    const childId = decoded.uid;
+    const doc = await db.collection('pairingCodes').doc(code.toUpperCase()).get();
+    if (!doc.exists) return res.status(400).json({ error: 'Invalid code' });
+    const data = doc.data();
+    if (data.used) return res.status(400).json({ error: 'Code already used' });
+    if (new Date(data.expiresAt.toDate()) < new Date()) return res.status(400).json({ error: 'Code expired' });
+    await db.collection('pairingCodes').doc(code.toUpperCase()).update({ used: true });
+    await db.collection('users').doc(childId).update({
+      parentId: data.parentId,
+      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await db.collection('users').doc(data.parentId).update({
+      children: admin.firestore.FieldValue.arrayUnion(childId),
+    });
+    res.json({ success: true, parentId: data.parentId });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notify', async (req, res) => {
+  try {
+    const { parentId, title, body, data } = req.body;
+    if (!parentId) return res.status(400).json({ error: 'parentId required' });
+    const parentDoc = await db.collection('users').doc(parentId).get();
+    const fcmToken = parentDoc.data()?.fcmToken;
+    if (fcmToken) {
+      await admin.messaging().send({ token: fcmToken, notification: { title, body }, data: data || {} });
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, role, name } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    const user = await admin.auth().createUser({ email, password, displayName: name });
+    await db.collection('users').doc(user.uid).set({ uid: user.uid, email, name, role, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true, uid: user.uid });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/pairing/generate', async (req, res) => {
+  try {
+    const { parentId } = req.body;
+    if (!parentId) return res.status(400).json({ error: 'parentId required' });
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const childId = 'child_' + Date.now();
+    await db.collection('pairingCodes').doc(code).set({ parentId, childId, code, createdAt: admin.firestore.FieldValue.serverTimestamp(), used: false });
+    await db.collection('pairing_codes').doc(code).set({ parentId, childId, createdAt: admin.firestore.FieldValue.serverTimestamp(), expiresAt: new Date(Date.now() + 24*60*60*1000) });
+    res.json({ success: true, code, childId });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/pairing/use', async (req, res) => {
+  try {
+    const { code, deviceId } = req.body;
+    if (!code) return res.status(400).json({ error: 'code required' });
+    let doc = await db.collection('pairing_codes').doc(code).get();
+    let collection = 'pairing_codes';
+    if (!doc.exists) { doc = await db.collection('pairingCodes').doc(code).get(); collection = 'pairingCodes'; }
+    if (!doc.exists) return res.status(400).json({ error: 'Invalid pairing code' });
+    const { parentId, childId } = doc.data();
+    await db.collection(collection).doc(code).update({ used: true, deviceId, pairedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await db.collection('families').doc(parentId).collection('children').doc(childId).update({ paired: true, deviceId, pairedAt: admin.firestore.FieldValue.serverTimestamp(), deviceOnline: true });
+    await db.collection('users').doc(parentId).collection('children').doc(childId).set({ childId, deviceId, pairedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    res.json({ success: true, parentId, childId });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/location/update', async (req, res) => {
+  try {
+    const { childId, parentId, latitude, longitude, locationName } = req.body;
+    if (!childId || !latitude || !longitude) return res.status(400).json({ error: 'Missing fields' });
+    await db.collection('locations').doc(childId).set({ childId, latitude, longitude, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    if (parentId) {
+      await db.collection('families').doc(parentId).collection('children').doc(childId).update({ location: { lat: latitude, lng: longitude }, locationName: locationName || '', locationUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get('/api/location/:childId', async (req, res) => {
+  try {
+    const doc = await db.collection('locations').doc(req.params.childId).get();
+    res.json(doc.exists ? doc.data() : {});
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/usage/update', async (req, res) => {
+  try {
+    const { childId, parentId, stats, date, todayMinutes } = req.body;
+    if (!childId) return res.status(400).json({ error: 'childId required' });
+    await db.collection('usageStats').doc(`${childId}_${date}`).set({ childId, stats, date, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    if (parentId && todayMinutes !== undefined) {
+      await db.collection('families').doc(parentId).collection('children').doc(childId).update({ todayMinutes, lastSync: admin.firestore.FieldValue.serverTimestamp() });
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/rules/set', async (req, res) => {
+  try {
+    const { childId, rules } = req.body;
+    await db.collection('appRules').doc(childId).set({ childId, rules, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/command/send', async (req, res) => {
+  try {
+    const { childId, command, params } = req.body;
+    await db.collection('commands').add({ childId, command, params, executed: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/alert/send', async (req, res) => {
+  try {
+    const { childId, parentId, title, body, type, severity } = req.body;
+    const alertData = { childId, title, body, type, severity: severity || 'info', read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() };
+    await db.collection('alerts').add(alertData);
+    if (parentId) { await db.collection('families').doc(parentId).collection('children').doc(childId).collection('alerts').add(alertData); }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/device/status', async (req, res) => {
+  try {
+    const { childId, parentId, battery, deviceOnline } = req.body;
+    if (parentId) { await db.collection('families').doc(parentId).collection('children').doc(childId).update({ battery, deviceOnline, lastSeen: admin.firestore.FieldValue.serverTimestamp() }); }
+    res.json({ success: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get('/reports/pdf/:childId', async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token) return res.status(401).json({ error: 'Token required' });
+    await admin.auth().verifyIdToken(token);
+    res.json({ message: 'PDF generation coming soon', childId: req.params.childId });
+  } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
+});
+
+// === SOCKET.IO REAL-TIME LOGIC ===
+io.on('connection', (socket) => {
+  console.log('🔗 Client Connected:', socket.id);
+
+  // 1. Join Room (Parent and Child connect to the same Parent ID room)
+  socket.on('join_room', ({ parentId }) => {
+    if (parentId) {
+      socket.join(parentId);
+      console.log(`👤 Socket ${socket.id} joined room: ${parentId}`);
+    }
+  });
+
+  // 2. Stream Screen or Camera Frame (Child -> Parent)
+  socket.on('stream_frame', (data) => {
+    // data: { parentId, childId, frameBase64, type }
+    if (data.parentId) {
+      io.to(data.parentId).emit('receive_frame', data);
+    }
+  });
+
+  // 3. Stream Ambient Audio (Child -> Parent)
+  socket.on('stream_audio', (data) => {
+    // data: { parentId, childId, audioLevel, isMuted }
+    if (data.parentId) {
+      io.to(data.parentId).emit('receive_audio', data);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ Client Disconnected:', socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`🚀 KidShield API v1.3 (WebSockets Enabled) running on port ${PORT}`));
+
+
+================================================
+=== FILE: android\app\src\main\java\com\kidshield\RemoteCameraModule.java ===
+================================================
+
+package com.kidshield;
+
+import android.content.Context;
+import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.*;
+import android.media.Image;
+import android.media.ImageReader;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.util.Base64;
+import android.view.Surface;
+import android.content.Intent;
+
+import com.facebook.react.bridge.*;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+
+public class RemoteCameraModule extends ReactContextBaseJavaModule {
+    private final ReactApplicationContext reactContext;
+    private CameraDevice cameraDevice;
+    private ImageReader imageReader;
+    private HandlerThread backgroundThread;
+    private Handler backgroundHandler;
+    
+    // Class level variables
+    private boolean isLiveActive = false;
+    private Runnable liveRunnable;
+    private Handler liveHandler;
+    private HandlerThread liveThread;
+    private boolean isFrontCameraActive = false;
+
+    public RemoteCameraModule(ReactApplicationContext context) {
+        super(context);
+        this.reactContext = context;
+    }
+
+    @Override
+    public String getName() { return "RemoteCamera"; }
+
+    @ReactMethod
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        promise.resolve(true);
+    }
+
+    @ReactMethod
+    public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
+        if (isLiveActive) { promise.resolve(true); return; }
+
+        isLiveActive = true;
+        isFrontCameraActive = useFront;
+        
+        // Start Foreground Service to satisfy Android 10+
+        try {
+            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+        } catch(Exception e) { e.printStackTrace(); }
+
+        liveThread = new HandlerThread("LiveCameraThread");
+        liveThread.start();
+        liveHandler = new Handler(liveThread.getLooper());
+
+        int intervalMs = Math.max(500, intervalSeconds * 1000);
+
+        liveRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isLiveActive) return;
+                captureLiveFrame(isFrontCameraActive);
+                liveHandler.postDelayed(this, intervalMs);
+            }
+        };
+        liveHandler.post(liveRunnable);
+        promise.resolve(true);
+    }
+
+    @ReactMethod
+    public void stopLiveCamera(Promise promise) {
+        isLiveActive = false;
+        
+        // Stop Foreground Service
+        try {
+            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
+
+        if (liveRunnable != null && liveHandler != null) {
+            liveHandler.removeCallbacks(liveRunnable);
+        }
+        stopCamera();
+        promise.resolve(true);
+    }
+
+    private void captureLiveFrame(boolean useFront) {
+        startBackgroundThread();
+        openCamera(useFront);
+    }
+
+    private void startBackgroundThread() {
+        if (backgroundThread != null && backgroundThread.isAlive()) return;
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
+    private void openCamera(boolean useFront) {
+        CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
+        try {
+            String cameraId = null;
+            if (useFront) {
+                for (String id : manager.getCameraIdList()) {
+                    CameraCharacteristics chars = manager.getCameraCharacteristics(id);
+                    Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+                    if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                        cameraId = id; break;
+                    }
+                }
+            } else {
+                cameraId = manager.getCameraIdList()[0];
+            }
+            if (cameraId == null) return;
+
+            int w = 640;
+            int h = 480;
+
+            imageReader = ImageReader.newInstance(w, h, ImageFormat.JPEG, 1);
+
+            imageReader.setOnImageAvailableListener(reader -> {
+                Image image = null;
+                try {
+                    image = reader.acquireLatestImage();
+                    if (image == null) return;
+                    ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                    byte[] bytes = new byte[buffer.capacity()];
+                    buffer.get(bytes);
+                    String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+
+                    WritableMap map = Arguments.createMap();
+                    map.putString("frame", base64);
+                    map.putString("type", useFront ? "camera_front" : "camera_back");
+
+                    reactContext
+                        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                        .emit("onCameraFrame", map);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    if (image != null) image.close();
+                    if (!isLiveActive) stopCamera();
+                }
+            }, backgroundHandler);
+
+            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    cameraDevice = camera;
+                    capturePhoto();
+                }
+                @Override public void onDisconnected(CameraDevice camera) { camera.close(); }
+                @Override public void onError(CameraDevice camera, int error) { camera.close(); }
+            }, backgroundHandler);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void capturePhoto() {
+        try {
+            SurfaceTexture texture = new SurfaceTexture(0);
+            texture.setDefaultBufferSize(640, 480);
+            Surface textureSurface = new Surface(texture);
+            Surface readerSurface = imageReader.getSurface();
+
+            cameraDevice.createCaptureSession(
+                Arrays.asList(textureSurface, readerSurface),
+                new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(CameraCaptureSession session) {
+                        try {
+                            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                            builder.addTarget(readerSurface);
+                            builder.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
+                            session.capture(builder.build(), null, backgroundHandler);
+                        } catch (Exception e) { e.printStackTrace(); }
+                    }
+                    @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                }, backgroundHandler
+            );
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    private void stopCamera() {
+        if (cameraDevice != null) { cameraDevice.close(); cameraDevice = null; }
+        if (backgroundThread != null) { backgroundThread.quitSafely(); backgroundThread = null; }
+    }
+}
+
+
+================================================
+=== FILE: android\app\src\main\java\com\kidshield\ScreenMirrorModule.java ===
+================================================
+
+package com.kidshield;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.PixelFormat;
+import android.hardware.display.DisplayManager;
+import android.hardware.display.VirtualDisplay;
+import android.media.Image;
+import android.media.ImageReader;
+import android.media.projection.MediaProjection;
+import android.media.projection.MediaProjectionManager;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.util.Base64;
+import android.util.DisplayMetrics;
+import android.view.WindowManager;
+
+import com.facebook.react.bridge.*;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+
+public class ScreenMirrorModule extends ReactContextBaseJavaModule implements ActivityEventListener {
+    private final ReactApplicationContext reactContext;
+    private MediaProjectionManager projectionManager;
+    private MediaProjection mediaProjection;
+    private VirtualDisplay virtualDisplay;
+    private ImageReader imageReader;
+    private HandlerThread handlerThread;
+    private Handler handler;
+    private static final int REQUEST_CODE = 1001;
+    private Promise pendingPermissionPromise;
+    
+    // Class level variables
+    private boolean isMirroring = false;
+    private int screenWidth, screenHeight, screenDensity;
+    private Runnable liveViewRunnable;
+
+    public ScreenMirrorModule(ReactApplicationContext context) {
+        super(context);
+        this.reactContext = context;
+        context.addActivityEventListener(this);
+
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        DisplayMetrics metrics = new DisplayMetrics();
+        wm.getDefaultDisplay().getMetrics(metrics);
+        screenWidth = metrics.widthPixels / 2;
+        screenHeight = metrics.heightPixels / 2;
+        screenDensity = metrics.densityDpi;
+    }
+
+    @Override
+    public String getName() { return "ScreenMirror"; }
+
+    @ReactMethod
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        promise.resolve(true);
+    }
+
+    @ReactMethod
+    public void requestPermission(Promise promise) {
+        Activity activity = getCurrentActivity();
+        if (activity == null) { promise.reject("NO_ACTIVITY", "No activity"); return; }
+        pendingPermissionPromise = promise;
+        projectionManager = (MediaProjectionManager) reactContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        activity.startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE);
+    }
+
+    @ReactMethod
+    public void startLiveView(int intervalSeconds, Promise promise) {
+        if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Need screen capture permission"); return; }
+        if (isMirroring) { promise.resolve(true); return; }
+
+        isMirroring = true;
+        
+        // Start Foreground Service to satisfy Android 10+
+        try {
+            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+        } catch(Exception e) { e.printStackTrace(); }
+
+        startBackgroundThread();
+        setupVirtualDisplay();
+
+        int intervalMs = Math.max(500, intervalSeconds * 1000);
+        liveViewRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isMirroring) return;
+                captureFrameAndEmit();
+                handler.postDelayed(this, intervalMs);
+            }
+        };
+        handler.postDelayed(liveViewRunnable, 500);
+        promise.resolve(true);
+    }
+
+    @ReactMethod
+    public void stopLiveView(Promise promise) {
+        isMirroring = false;
+        
+        // Stop Foreground Service
+        try {
+            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
+            reactContext.stopService(serviceIntent);
+        } catch(Exception e) { e.printStackTrace(); }
+
+        if (liveViewRunnable != null && handler != null) {
+            handler.removeCallbacks(liveViewRunnable);
+        }
+        releaseResources();
+        promise.resolve(true);
+    }
+
+    private void startBackgroundThread() {
+        handlerThread = new HandlerThread("ScreenCaptureThread");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
+    }
+
+    private void setupVirtualDisplay() {
+        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} }
+        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2);
+        virtualDisplay = mediaProjection.createVirtualDisplay(
+            "KidShieldLive", screenWidth, screenHeight, screenDensity,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader.getSurface(), null, handler
+        );
+    }
+
+    private void captureFrameAndEmit() {
+        if (imageReader == null) return;
+        try {
+            Image image = imageReader.acquireLatestImage();
+            if (image == null) return;
+
+            Image.Plane[] planes = image.getPlanes();
+            ByteBuffer buffer = planes[0].getBuffer();
+            int rowStride = planes[0].getRowStride();
+            int pixelStride = planes[0].getPixelStride();
+            int w = rowStride / pixelStride;
+
+            Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
+            bmp.copyPixelsFromBuffer(buffer);
+            image.close();
+
+            if (w > screenWidth) bmp = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bmp.compress(Bitmap.CompressFormat.JPEG, 30, baos);
+            String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+            reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("onScreenFrame", base64);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                mediaProjection = projectionManager.getMediaProjection(resultCode, data);
+                if (pendingPermissionPromise != null) {
+                    pendingPermissionPromise.resolve(true);
+                    pendingPermissionPromise = null;
+                }
+            } else {
+                if (pendingPermissionPromise != null) {
+                    pendingPermissionPromise.reject("DENIED", "Screen capture permission denied");
+                    pendingPermissionPromise = null;
+                }
+            }
+        }
+    }
+
+    private void releaseResources() {
+        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
+        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} imageReader = null; }
+        if (handlerThread != null) { handlerThread.quitSafely(); handlerThread = null; }
+    }
+
+    @Override public void onNewIntent(Intent intent) {}
+}
+
+
+================================================
+=== FILE: android\app\src\main\AndroidManifest.xml ===
+================================================
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="true"
+      android:requestLegacyExternalStorage="true">
+
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity>
+
+      <activity
+        android:name=".BlockScreenActivity"
+        android:exported="false"
+        android:theme="@style/AppTheme"
+        android:excludeFromRecents="true"
+        android:launchMode="singleInstance" />
+
+      <receiver
+        android:name=".KidShieldDeviceAdmin"
+        android:label="KidShield Device Admin"
+        android:description="@string/app_name"
+        android:permission="android.permission.BIND_DEVICE_ADMIN"
+        android:exported="true">
+        <meta-data
+          android:name="android.app.device_admin"
+          android:resource="@xml/device_admin" />
+        <intent-filter>
+          <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+        </intent-filter>
+      </receiver>
+
+      <service
+        android:name=".KidShieldAccessibilityService"
+        android:label="KidShield Parental Control"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.accessibilityservice.AccessibilityService" />
+        </intent-filter>
+        <meta-data
+          android:name="android.accessibilityservice"
+          android:resource="@xml/accessibility_service_config" />
+      </service>
+
+      <service
+        android:name=".ScreenCaptureService"
+        android:foregroundServiceType="mediaProjection"
+        android:exported="false" />
+
+      <service
+        android:name=".RemoteCameraService"
+        android:foregroundServiceType="camera"
+        android:exported="false" />
+
+      <receiver
+        android:name=".BootReceiver"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
+
+      <receiver
+        android:name=".SecretDialReceiver"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
+        </intent-filter>
+      </receiver>
+
+            <receiver
+            android:name=".KidShieldDeviceAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
+
+
+================================================
+=== FILE: web-admin\index.html ===
+================================================
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KidShield Admin Dashboard</title>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #060b14; --card: #111d35; --accent: #00d4ff; --accent2: #7c3aed;
+      --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+      --text: #ffffff; --muted: #8899aa; --border: #1e3a5f;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+
+    /* LOGIN */
+    #login-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+    .login-card { background: var(--card); border-radius: 24px; padding: 40px; width: 100%; max-width: 400px; border: 1px solid var(--border); }
+    .login-logo { font-size: 48px; text-align: center; margin-bottom: 8px; }
+    .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+    .login-sub { color: var(--muted); text-align: center; margin-bottom: 32px; font-size: 14px; }
+
+    /* APP */
+    #app { display: none; }
+    .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; }
+    .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .sidebar-logo-text { font-size: 18px; font-weight: 900; }
+    .sidebar-logo-sub { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; transition: all 0.15s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: rgba(0,212,255,0.05); color: var(--text); }
+    .nav-item.active { background: rgba(0,212,255,0.1); color: var(--accent); border-left-color: var(--accent); }
+    .nav-icon { font-size: 18px; min-width: 22px; text-align: center; }
+    .nav-logout { margin-top: auto; }
+    .nav-logout:hover { color: var(--danger) !important; }
+    .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
+
+    /* CHILDREN TABS */
+    .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+    .child-tab { background: var(--card); border: 2px solid transparent; border-radius: 40px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
+    .child-tab.active { border-color: var(--accent); color: var(--accent); }
+    .child-tab-add { border-style: dashed !important; border-color: var(--border) !important; }
+    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+    /* STATS */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stat-icon { font-size: 28px; margin-bottom: 12px; }
+    .stat-val { font-size: 26px; font-weight: 900; }
+    .stat-lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .stat-badge { position: absolute; top: 14px; right: 14px; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+    .stat-badge-online { background: rgba(34,197,94,0.15); color: var(--success); }
+    .stat-badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+    /* SECTIONS */
+    .section { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+    .section-title { font-size: 16px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(30,58,95,0.5); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+
+    /* BADGES */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
+    .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .badge-info { background: rgba(0,212,255,0.15); color: var(--accent); }
+
+    /* TOGGLE */
+    .toggle { position: relative; width: 44px; height: 24px; display: inline-block; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #2d3748; border-radius: 24px; transition: 0.3s; }
+    .toggle-slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+    input:checked + .toggle-slider { background: var(--accent); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+    /* INPUTS */
+    input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, input[type="time"] {
+      background: #0d1a2d; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+
+    /* BUTTONS */
+    .btn { padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; border: none; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    /* MAP */
+    .map-placeholder { background: #0d1a2d; border-radius: 12px; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); border: 1px dashed var(--border); }
+    #map-iframe { width: 100%; height: 300px; border-radius: 12px; border: none; display: none; }
+
+    /* LOADER */
+    .loader { display: flex; justify-content: center; padding: 40px; }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 999; justify-content: center; align-items: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 440px; border: 1px solid var(--border); }
+    .modal-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .pairing-code-display { background: #0d1a2d; border: 2px dashed var(--accent); border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; }
+    .pairing-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: var(--accent); font-family: monospace; }
+    .pairing-sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    /* LIVE MONITOR */
+    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .live-card { background: #0d1a2d; border-radius: 16px; padding: 20px; border: 1px solid var(--border); text-align: center; cursor: pointer; transition: all 0.2s; }
+    .live-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .live-card.active { border-color: var(--success); background: rgba(34,197,94,0.05); }
+    .live-icon { font-size: 36px; margin-bottom: 10px; }
+    .live-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .live-status { font-size: 12px; color: var(--muted); }
+    .live-status.on { color: var(--success); font-weight: 600; }
+    .stream-area { background: #000; border-radius: 12px; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; margin-top: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stream-area img { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
+
+    /* REPORT BARS */
+    .app-bar-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(30,58,95,0.4); }
+    .app-bar-row:last-child { border-bottom: none; }
+    .app-bar-fill { height: 8px; border-radius: 4px; background: var(--accent); transition: width 0.4s; }
+    .app-bar-bg { flex: 1; background: #0d1a2d; border-radius: 4px; height: 8px; overflow: hidden; }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar-logo-text, .nav-label, .sidebar-logo-sub { display: none; }
+      .main { margin-left: 60px; padding: 16px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="login-page">
+  <div class="login-card">
+    <div class="login-logo">🛡️</div>
+    <h1 class="login-title">KidShield</h1>
+    <p class="login-sub">Web Admin Dashboard — Parent Login</p>
+    <div style="margin-bottom:14px">
+      <input type="email" id="login-email" placeholder="Email address" />
+    </div>
+    <div style="margin-bottom:20px">
+      <input type="password" id="login-password" placeholder="Password" />
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="doLogin()">Login</button>
+    <p style="text-align:center;margin-top:16px;font-size:14px;color:#aaa">New user? <a href="#" onclick="doRegister(event)" style="color:#00d4ff;text-decoration:none;font-weight:bold">Register</a></p>
+    <p id="login-error" style="color:var(--danger);font-size:13px;margin-top:12px;text-align:center;display:none"></p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-child" onclick="handleModalOutsideClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">👶 Add Child Device</div>
+    <div id="modal-step-1">
+      <div class="modal-field">
+        <label>Child's Name</label>
+        <input type="text" id="child-name" placeholder="e.g. Arjun" />
+      </div>
+      <div class="modal-field">
+        <label>Age</label>
+        <input type="number" id="child-age" placeholder="e.g. 10" min="1" max="17" />
+      </div>
+      <div class="modal-field">
+        <label>Emoji Avatar</label>
+        <select id="child-emoji">
+          <option value="👦">👦 Boy</option>
+          <option value="👧">👧 Girl</option>
+          <option value="🧒">🧒 Child</option>
+          <option value="👶">👶 Baby</option>
+          <option value="🧑">🧑 Teen</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="generatePairingCode()">Generate Pairing Code</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+    <div id="modal-step-2" style="display:none">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Share this code with your child's Android device:</p>
+      <div class="pairing-code-display">
+        <div class="pairing-code" id="pairing-code-text">------</div>
+        <div class="pairing-sub">Enter this code in KidShield app on child's phone</div>
+      </div>
+      <div style="background:#0d1a2d;border-radius:10px;padding:14px;margin-bottom:16px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Steps for child's phone:</p>
+        <p style="font-size:13px;margin-bottom:4px">1. Open KidShield app</p>
+        <p style="font-size:13px;margin-bottom:4px">2. Tap "Enter Pairing Code"</p>
+        <p style="font-size:13px;margin-bottom:4px">3. Enter the code above</p>
+        <p style="font-size:13px;">4. Enable all permissions</p>
+      </div>
+      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:12px;background:#0d1a2d;border-radius:10px">
+        ⏳ Waiting for child device to connect...
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-time-limit" onclick="handleModalOutsideClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">⏱️ Screen Time Limits</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Set daily screen time limit and bedtime for selected child.</p>
+    <div class="modal-field">
+      <label>Daily Limit (hours)</label>
+      <input type="number" id="daily-limit-hours" placeholder="e.g. 3" min="0" max="24" />
+    </div>
+    <div class="modal-field">
+      <label>Bedtime Start (block phone after)</label>
+      <input type="time" id="bedtime-start" value="" />
+    </div>
+    <div class="modal-field">
+      <label>Bedtime End (unblock phone at)</label>
+      <input type="time" id="bedtime-end" value="" />
+    </div>
+    <div class="modal-field">
+      <label>Weekend limit different?</label>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+        <label class="toggle"><input type="checkbox" id="weekend-different"><span class="toggle-slider"></span></label>
+        <span style="font-size:13px;color:var(--muted)">Enable separate weekend limit</span>
+      </div>
+    </div>
+    <div id="weekend-limit-field" style="display:none" class="modal-field">
+      <label>Weekend Daily Limit (hours)</label>
+      <input type="number" id="weekend-limit-hours" placeholder="e.g. 5" min="0" max="24" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1" onclick="saveTimeLimits()">Save Limits</button>
+      <button class="btn btn-ghost" onclick="closeTimeLimitModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">🛡️ KidShield</div>
+      <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
+    </div>
+    <nav style="flex:1;display:flex;flex-direction:column;gap:2px;">
+      <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
+        <span class="nav-icon">🏠</span><span class="nav-label">Overview</span>
+      </div>
+      <div class="nav-item" onclick="showSection('location')" id="nav-location">
+        <span class="nav-icon">📍</span><span class="nav-label">Location</span>
+      </div>
+      <div class="nav-item" onclick="showSection('live')" id="nav-live">
+        <span class="nav-icon">📹</span><span class="nav-label">Live Monitor</span>
+      </div>
+      <div class="nav-item" onclick="showSection('apps')" id="nav-apps">
+        <span class="nav-icon">📱</span><span class="nav-label">App Control</span>
+      </div>
+      <div class="nav-item" onclick="showSection('screentime')" id="nav-screentime">
+        <span class="nav-icon">⏱️</span><span class="nav-label">Screen Time</span>
+      </div>
+      <div class="nav-item" onclick="showSection('filter')" id="nav-filter">
+        <span class="nav-icon">🔒</span><span class="nav-label">Web Filter</span>
+      </div>
+      <div class="nav-item" onclick="showSection('reports')" id="nav-reports">
+        <span class="nav-icon">📊</span><span class="nav-label">Reports</span>
+      </div>
+      <div class="nav-item" onclick="showSection('alerts')" id="nav-alerts">
+        <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span>
+      </div>
+    </nav>
+    <div class="nav-item nav-logout" onclick="doLogout()">
+      <span class="nav-icon">🚪</span><span class="nav-label">Logout</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="children-tabs" id="children-tabs">
+      <div class="loader"><div class="spinner"></div></div>
+    </div>
+
+    <div id="section-overview">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div id="device-status-badge" class="stat-badge stat-badge-offline">Offline</div>
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-val" id="stat-screentime">--</div>
+          <div class="stat-lbl">Screen Time Today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🚫</div>
+          <div class="stat-val" id="stat-blocked">--</div>
+          <div class="stat-lbl">Blocked Attempts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🔋</div>
+          <div class="stat-val" id="stat-battery">--%</div>
+          <div class="stat-lbl">Battery Level</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📍</div>
+          <div class="stat-val" id="stat-location" style="font-size:16px;margin-top:4px">--</div>
+          <div class="stat-lbl">Current Location</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">🕒 Recent Activity</h3>
+          <button class="btn btn-danger btn-sm" onclick="deleteCurrentChild()" style="margin-right:auto; margin-left:15px;">🗑️ Delete Child</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadActivity()">Refresh</button>
+        </div>
+        <div id="activity-list"><div class="loader"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <div id="section-location" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">📍 Real-time Location</h3>
+          <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
+        </div>
+        <div id="map-area" class="map-placeholder">
+          <span style="font-size:48px">🗺️</span>
+          <p>Select a child to view location</p>
+          <p id="location-coords" style="font-size:13px;color:var(--accent)"></p>
+        </div>
+        <iframe id="map-iframe" allowfullscreen></iframe>
+      </div>
+    </div>
+
+    <div id="section-live" style="display:none">
+      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#fca5a5;">
+        ⚠️ <strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.
+      </div>
+      <div class="live-grid">
+        <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
+          <div class="live-icon">💻</div>
+          <div class="live-title">Screen Mirror</div>
+          <div class="live-status" id="status-screen">Click to start</div>
+        </div>
+        <div class="live-card" id="card-camera_back" onclick="toggleLive('camera_back')">
+          <div class="live-icon">📷</div>
+          <div class="live-title">Back Camera</div>
+          <div class="live-status" id="status-camera_back">Click to start</div>
+        </div>
+        <div class="live-card" id="card-camera_front" onclick="toggleLive('camera_front')">
+          <div class="live-icon">🤳</div>
+          <div class="live-title">Front Camera</div>
+          <div class="live-status" id="status-camera_front">Click to start</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title" id="live-section-title">📹 Live Feed</h3>
+          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">⏹ Stop</button>
+        </div>
+        <div class="stream-area" id="stream-area" style="position:relative;">
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
+          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+             <p style="color:var(--muted)">Select a feature above to start monitoring</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="section-apps" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">📱 Installed Apps</h3>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input type="text" placeholder="Search apps..." style="width:180px" oninput="filterApps(this.value)" />
+            <button class="btn btn-ghost btn-sm" onclick="loadApps()">Refresh</button>
+          </div>
+        </div>
+        <div id="apps-list"><div class="loader"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <div id="section-screentime" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">⏱️ Screen Time Limits</h3>
+          <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">✏️ Edit Limits</button>
+        </div>
+        <div id="screentime-info">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Daily Limit</div>
+              <div style="font-size:28px;font-weight:900" id="st-daily-limit">--</div>
+              <div style="font-size:12px;color:var(--muted)">hours per day</div>
+            </div>
+            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Bedtime</div>
+              <div style="font-size:22px;font-weight:900" id="st-bedtime">--</div>
+              <div style="font-size:12px;color:var(--muted)">phone locked during this time</div>
+            </div>
+          </div>
+          <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+            <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Today's Usage</div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <div style="flex:1">
+                <div style="background:var(--border);border-radius:8px;height:16px;overflow:hidden">
+                  <div id="usage-bar" style="height:100%;background:var(--accent);border-radius:8px;transition:width 0.5s;width:0%"></div>
+                </div>
+              </div>
+              <span id="usage-text" style="font-size:13px;color:var(--muted);white-space:nowrap">0h 0m used</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="section-filter" style="display:none">
+      <div class="section">
+        <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
+        <div style="margin-bottom:24px">
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Category Blocks</h4>
+          <div id="category-toggles"><div class="loader"><div class="spinner"></div></div></div>
+        </div>
+        <div>
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Custom Blocked Domains</h4>
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <input type="text" id="new-domain" placeholder="e.g. example.com" style="flex:1" onkeypress="if(event.key==='Enter')blockDomain()" />
+            <button class="btn btn-primary" onclick="blockDomain()">Block</button>
+          </div>
+          <div id="blocked-domains-list"><div class="loader"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="section-reports" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">📊 Weekly Report</h3>
+          <button class="btn btn-primary btn-sm" onclick="downloadReport()">📄 Download PDF</button>
+        </div>
+        <div id="top-apps-list"><div class="loader"><div class="spinner"></div></div></div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">📈 Website Activity</h3>
+        </div>
+        <div id="top-sites-list"><div class="loader"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <div id="section-alerts" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <h3 class="section-title">🔔 All Alerts</h3>
+          <div style="display:flex;gap:8px">
+            <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:8px 12px">
+              <option value="">All Types</option>
+              <option value="blocked_site">Blocked Sites</option>
+              <option value="blocked_app">Blocked Apps</option>
+              <option value="location">Location</option>
+              <option value="screen_time">Screen Time</option>
+              <option value="system_error">System Errors</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadAlerts()">Refresh</button>
+          </div>
+        </div>
+        <div id="alerts-list"><div class="loader"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ==========================================
+// 1. CONFIGURATION & FIREBASE INIT
+// ==========================================
+const firebaseConfig = {
+  apiKey: "AIzaSyC6NE6XH7Bv_g1XJRik2wsbMTPxXDglyPs",
+  authDomain: "kidshield-8744e.firebaseapp.com",
+  databaseURL: "https://kidshield-8744e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kidshield-8744e",
+  storageBucket: "kidshield-8744e.firebasestorage.app",
+  messagingSenderId: "966097917754",
+  appId: "1:966097917754:web:67c2cca3cc78ad77cf6203"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Globals
+let currentParentId = null;
+let currentChildId = null;
+let currentChildData = {};
+let allApps = [];
+let locationUnsubscribe = null;
+let statsUnsubscribe = null;
+let pairingUnsubscribe = null;
+let currentLiveMode = null;
+let liveTimeout = null;
+let statsInterval = null;
+let socket = null; 
+let isAudioActive = false;
+let audioListenerAttached = false; 
+
+const BACKEND_URL = 'https://kidshield-0757.onrender.com';
+const LIVE_TIMEOUT_MS = 15000;
+
+// ==========================================
+// 2. EXACT ERROR TRACKER & SEND COMMAND
+// ==========================================
+async function sendCommand(command, data = {}) {
+  if (!currentChildId || !currentParentId) return;
+  try {
+    const cmdRef = await db.collection('commands').add({
+      childId: currentChildId,
+      parentId: currentParentId,
+      command: command,
+      data: data,
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`Command sent: ${command}`, data);
+
+    // EXACT ERROR TRACKER (Live Listener)
+    const unsub = cmdRef.onSnapshot(doc => {
+       const cmdData = doc.data();
+       if (!cmdData) return;
+
+       if (cmdData.status === 'failed') {
+           const exactError = cmdData.error || "Unknown Technical Error";
+           
+           alert("❌ APP ERROR [" + command + "]:\n\n" + exactError);
+
+           if(liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
+           const sContent = document.getElementById('stream-content');
+           if(sContent) {
+               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);">
+                   <span style="font-size:30px;">⚠️</span><br/><br/>
+                   <b style="font-size:16px;">App Execution Error</b><br/><br/>
+                   <div style="text-align:left; font-size:13px; color:#fca5a5;">
+                       <b>Exact Error from Phone:</b><br/>${exactError}<br/><br/>
+                       <b>Action Required:</b> Open the app on the child phone, ensure all permissions are granted, and try again.
+                   </div>
+               </div>`;
+           }
+           
+           const statusEl = document.getElementById('status-' + currentLiveMode);
+           if(statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
+           
+           unsub(); 
+       } else if (cmdData.status === 'executed') {
+           console.log(`Command ${command} executed successfully by phone!`);
+           unsub(); 
+       }
+    });
+
+  } catch (err) {
+    alert("❌ Web Admin Error: " + err.message);
+  }
+}
+
+// ==========================================
+// 3. SOCKET & LIVE MONITOR LOGIC
+// ==========================================
+function initSocket(userId) {
+  if (socket && socket.connected) return;
+
+  socket = io(BACKEND_URL, {
+    transports: ['websocket', 'polling'], 
+    timeout: 10000,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
+  });
+
+  socket.on('connect', () => {
+    console.log('✅ Web Admin connected to Socket.io:', socket.id);
+    socket.emit('join_room', { parentId: userId });
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('❌ Socket disconnected:', reason);
+  });
+
+  socket.on('receive_frame', (data) => {
+    if (!currentLiveMode) return;
+    if (data.childId !== currentChildId) return;
+
+    const typeMatch =
+      (currentLiveMode === 'screen'       && data.type === 'screen') ||
+      (currentLiveMode === 'camera_back'  && data.type === 'camera_back') ||
+      (currentLiveMode === 'camera_front' && data.type === 'camera_front');
+
+    if (!typeMatch) return;
+
+    if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
+
+    const streamContent = document.getElementById('stream-content');
+    if (!streamContent) return;
+
+    streamContent.innerHTML = `
+      <img
+        src="data:image/jpeg;base64,${data.frameBase64}"
+        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:12px;"
+        onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
+      />`;
+
+    const statusEl = document.getElementById('status-' + currentLiveMode);
+    if (statusEl) {
+      statusEl.textContent = 'Live ●';
+      statusEl.className = 'live-status on';
+    }
+    document.getElementById('audio-toggle-btn').style.display = 'block';
+  });
+
+  attachAudioListener();
+}
+
+function attachAudioListener() {
+  if (audioListenerAttached || !socket) return;
+  audioListenerAttached = true;
+
+  socket.on('receive_audio', (data) => {
+    if (!isAudioActive) return;
+    if (data.childId !== currentChildId) return;
+    if (!data.audioBase64) return;
+
+    try {
+      const audioSrc = 'data:audio/wav;base64,' + data.audioBase64;
+      const audio = new Audio(audioSrc);
+      audio.volume = 1.0;
+      audio.play().catch(e => console.log('Audio blocked:', e.message));
+    } catch (e) {
+      console.log('Audio play error:', e);
+    }
+  });
+}
+
+function toggleLive(mode) {
+  if (!currentChildId) { alert('Please select a child first'); return; }
+  if (currentLiveMode === mode) { stopAllLive(); return; }
+
+  stopAllLive();
+  currentLiveMode = mode;
+
+  document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('card-' + mode)?.classList.add('active');
+  document.getElementById('btn-stop-live').style.display = 'block';
+
+  const titles = { screen: '🖥️ Screen Mirror — Live', camera_back: '📷 Back Camera — Live', camera_front: '🤳 Front Camera — Live' };
+  document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
+
+  const streamContent = document.getElementById('stream-content');
+  streamContent.innerHTML = `
+    <div style="text-align:center;padding:40px">
+      <div class="spinner" style="margin:0 auto 16px"></div>
+      <p style="color:var(--muted)">Connecting via WebSockets...</p>
+    </div>`;
+
+  document.getElementById('audio-toggle-btn').style.display = 'none';
+
+  if (liveTimeout) clearTimeout(liveTimeout);
+  liveTimeout = setTimeout(() => {
+    if (!currentLiveMode) return;
+    const sContent = document.getElementById('stream-content');
+    if (sContent) {
+      sContent.innerHTML = `
+        <div style="text-align:center;padding:40px;color:#ef4444;">
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:12px">Connection Timeout</div>
+          <div style="font-size:13px;color:#fca5a5;max-width:320px;margin:0 auto">
+            1. App is closed/killed<br>2. Internet is OFF<br>3. Permissions denied
+          </div>
+          <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">Retry</button>
+        </div>`;
+    }
+    const statusEl = document.getElementById('status-' + mode);
+    if (statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
+  }, LIVE_TIMEOUT_MS);
+
+  if (mode === 'screen') sendCommand('START_LIVE_VIEW', { intervalSeconds: 1 });
+  else if (mode === 'camera_back') sendCommand('START_LIVE_CAMERA', { useFront: false, intervalSeconds: 1 });
+  else if (mode === 'camera_front') sendCommand('START_LIVE_CAMERA', { useFront: true, intervalSeconds: 1 });
+}
+
+function stopAllLive() {
+  if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
+
+  if (currentLiveMode === 'screen') sendCommand('STOP_LIVE_VIEW');
+  else if (currentLiveMode === 'camera_back' || currentLiveMode === 'camera_front') sendCommand('STOP_LIVE_CAMERA');
+
+  if (isAudioActive) { sendCommand('STOP_AUDIO_CAPTURE'); isAudioActive = false; }
+  currentLiveMode = null;
+
+  document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.live-status').forEach(s => { s.textContent = 'Click to start'; s.className = 'live-status'; });
+
+  document.getElementById('btn-stop-live').style.display = 'none';
+  document.getElementById('audio-toggle-btn').style.display = 'none';
+  document.getElementById('audio-toggle-btn').textContent = 'Turn Audio ON';
+  document.getElementById('audio-toggle-btn').className = 'btn btn-primary btn-sm';
+
+  const streamContent = document.getElementById('stream-content');
+  if (streamContent) streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
+  document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
+}
+
+function toggleAudioStream() {
+  if (!currentChildId || !currentLiveMode) return;
+  isAudioActive = !isAudioActive;
+  const btn = document.getElementById('audio-toggle-btn');
+  if (isAudioActive) {
+    btn.textContent = '🔇 Mute Audio';
+    btn.classList.replace('btn-primary', 'btn-danger');
+    sendCommand('START_AUDIO_CAPTURE', { requestId: 'audio_' + Date.now() });
+  } else {
+    btn.textContent = 'Turn Audio ON';
+    btn.classList.replace('btn-danger', 'btn-primary');
+    sendCommand('STOP_AUDIO_CAPTURE');
+  }
+}
+
+// ==========================================
+// 4. AUTH & CORE LOGIC
+// ==========================================
+auth.onAuthStateChanged(user => {
+  if (user) {
+    currentParentId = user.uid;
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('parent-email-display').textContent = user.email;
+
+    initSocket(user.uid);
+    loadChildren();
+    if (statsInterval) clearInterval(statsInterval);
+    statsInterval = setInterval(loadLiveStats, 30000);
+  } else {
+    stopAllLive();
+    document.getElementById('login-page').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    currentParentId = null;
+    currentChildId = null;
+    audioListenerAttached = false;
+    if (statsInterval) clearInterval(statsInterval);
+    if (socket) { socket.disconnect(); socket = null; }
+  }
+});
+
+function doRegister(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pass) return showLoginError('Enter email and password');
+  firebase.auth().createUserWithEmailAndPassword(email, pass).catch(e => showLoginError(e.message));
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pass) return showLoginError('Enter email and password');
+  firebase.auth().signInWithEmailAndPassword(email, pass).catch(e => showLoginError('Login failed: ' + e.message));
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function doLogout() { auth.signOut(); }
+
+document.getElementById('login-password').addEventListener('keypress', function(e) { if (e.key === 'Enter') doLogin(); });
+
+// ==========================================
+// 5. CHILDREN & TABS LOGIC
+// ==========================================
+async function loadChildren() {
+  const tabsEl = document.getElementById('children-tabs');
+  tabsEl.innerHTML = '';
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').get();
+    let firstChild = null;
+    snap.forEach(doc => {
+      const child = { id: doc.id, ...doc.data() };
+      if (!firstChild) firstChild = child;
+      const tab = document.createElement('div');
+      const isActive = currentChildId === child.id;
+      tab.className = 'child-tab' + (isActive ? ' active' : '');
+      tab.innerHTML = (child.emoji || '👦') + ' ' + child.name;
+      tab.onclick = () => selectChild(child.id, tab);
+      tabsEl.appendChild(tab);
+    });
+
+    if (!currentChildId && firstChild) {
+      currentChildId = firstChild.id;
+      const firstTab = tabsEl.querySelector('.child-tab');
+      if (firstTab) firstTab.classList.add('active');
+      loadChildData();
+    } else if (!firstChild) {
+      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:4px 8px;">No children yet —</span>';
+    }
+  } catch (err) { console.error(err); }
+
+  const addBtn = document.createElement('div');
+  addBtn.className = 'child-tab child-tab-add';
+  addBtn.innerHTML = '+ Add Child';
+  addBtn.onclick = () => openAddChildModal();
+  tabsEl.appendChild(addBtn);
+}
+
+function selectChild(childId, tabEl) {
+  if (currentChildId === childId) return;
+  currentChildId = childId;
+  document.querySelectorAll(".child-tab").forEach(t => t.classList.remove("active"));
+  tabEl.classList.add("active");
+  stopAllLive();
+  loadChildData();
+
+  const activeNav = document.querySelector(".nav-item.active");
+  if (activeNav) {
+      const sec = activeNav.id.replace("nav-", "");
+      if (sec === "apps") loadApps();
+      if (sec === "filter") loadFilter();
+      if (sec === "alerts") loadAlerts();
+      if (sec === "location") loadLocation();
+      if (sec === "screentime") loadScreenTimeSection();
+  }
+}
+
+function loadChildData() {
+  loadActivity();
+  loadLiveStats();
+  subscribeToChildStats();
+}
+
+// Modals
+function openAddChildModal() {
+  document.getElementById('modal-add-child').classList.add('open');
+  document.getElementById('modal-step-1').style.display = 'block';
+  document.getElementById('modal-step-2').style.display = 'none';
+}
+function closeModal() { document.getElementById('modal-add-child').classList.remove('open'); }
+function handleModalOutsideClick(e) { if (e.target === e.currentTarget) closeModal(); }
+
+async function generatePairingCode() {
+  const name = document.getElementById('child-name').value.trim();
+  if (!name) return alert('Enter child name');
+  const code = Math.random().toString(36).substr(2, 6).toUpperCase();
+  const childId = 'child_' + Date.now();
+  try {
+    await db.collection('families').doc(currentParentId).collection('children').doc(childId).set({
+      name, age: parseInt(document.getElementById('child-age').value)||0, emoji: document.getElementById('child-emoji').value||'👦',
+      pairingCode: code, paired: false, deviceOnline: false, todayMinutes: 0, battery: null, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('pairing_codes').doc(code).set({
+      parentId: currentParentId, childId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), expiresAt: new Date(Date.now() + 24*3600000)
+    });
+    document.getElementById('pairing-code-text').textContent = code;
+    document.getElementById('modal-step-1').style.display = 'none';
+    document.getElementById('modal-step-2').style.display = 'block';
+    loadChildren();
+  } catch (err) { alert(err.message); }
+}
+
+function deleteCurrentChild() {
+  if(!currentChildId) return;
+  if(confirm("Permanently delete this child's data?")) {
+    db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).delete()
+    .then(() => { alert("Deleted!"); location.reload(); }).catch(e => alert(e.message));
+  }
+}
+
+// ==========================================
+// 6. DASHBOARD & STATS LOGIC
+// ==========================================
+function showSection(name) {
+  document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
+  const sec = document.getElementById('section-' + name);
+  if (sec) sec.style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-' + name)?.classList.add('active');
+
+  if (name !== 'live') stopAllLive();
+  if (name !== 'location' && locationUnsubscribe) { locationUnsubscribe(); locationUnsubscribe = null; }
+
+  if (name === 'apps') loadApps();
+  if (name === 'filter') loadFilter();
+  if (name === 'alerts') loadAlerts();
+  if (name === 'location') loadLocation();
+  if (name === 'screentime') loadScreenTimeSection();
+}
+
+function subscribeToChildStats() {
+  if (statsUnsubscribe) statsUnsubscribe();
+  if (!currentChildId) return;
+  statsUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).onSnapshot(doc => {
+    currentChildData = doc.data() || {};
+    updateStatsUI(currentChildData);
+  });
+}
+
+function updateStatsUI(data) {
+  const mins = data.todayMinutes || 0;
+  document.getElementById('stat-screentime').textContent = Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
+  document.getElementById('stat-battery').textContent = (data.battery != null ? data.battery : '--') + '%';
+  document.getElementById('stat-location').textContent = data.locationName || 'Unknown';
+  const badge = document.getElementById('device-status-badge');
+  badge.textContent = data.deviceOnline ? '● Online' : '○ Offline';
+  badge.className = data.deviceOnline ? 'stat-badge stat-badge-online' : 'stat-badge stat-badge-offline';
+}
+
+async function loadLiveStats() {
+  if (!currentChildId || !currentParentId) return;
+  const doc = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).get();
+  currentChildData = doc.data() || {};
+  updateStatsUI(currentChildData);
+  loadScreenTimeSection();
+}
+
+async function loadActivity() {
+  if (!currentChildId) return;
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('activity').orderBy('timestamp','desc').limit(15).get();
+    const el = document.getElementById('activity-list');
+    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;">No activity yet</p>'; return; }
+    el.innerHTML = '<table><tbody>' + snap.docs.map(doc => {
+      const d = doc.data();
+      const time = d.timestamp?.toDate?.()?.toLocaleTimeString() || '--';
+      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type||'--'}</td><td>${d.details||'--'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+  } catch(e) {}
+}
+
+// ==========================================
+// 7. MODULES (Apps, Filter, Time, Location)
+// ==========================================
+async function loadApps() {
+  if (!currentChildId) return;
+  document.getElementById('apps-list').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').get();
+    allApps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    filterApps('');
+  } catch(e) {}
+}
+function filterApps(q) {
+  const filtered = allApps.filter(a => (a.appName||a.id).toLowerCase().includes(q.toLowerCase()));
+  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:20px">No apps</p>'; return; }
+  document.getElementById('apps-list').innerHTML = '<table><tbody>' + filtered.map(app => {
+    return `<tr><td><b>${app.appName||app.id}</b></td>
+    <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
+  }).join('') + '</tbody></table>';
+}
+async function toggleApp(appId, blocked) {
+  try { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').doc(appId).update({ blocked }); } catch(e){}
+}
+
+async function loadFilter() { loadBlockedDomains(); }
+async function loadBlockedDomains() {
+  if (!currentChildId) return;
+  const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').get();
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">🚫 ${d.id} <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p>No blocked domains</p>';
+}
+async function blockDomain() {
+  const domain = document.getElementById('new-domain').value.trim().toLowerCase();
+  if (!domain || !currentChildId) return;
+  await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').doc(domain).set({ active: true });
+  document.getElementById('new-domain').value = ''; loadBlockedDomains();
+}
+async function unblockDomain(domain) { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').doc(domain).delete(); loadBlockedDomains(); }
+
+function openTimeLimitModal() { document.getElementById('modal-time-limit').classList.add('open'); }
+function closeTimeLimitModal() { document.getElementById('modal-time-limit').classList.remove('open'); }
+async function saveTimeLimits() { closeTimeLimitModal(); }
+function loadScreenTimeSection() {}
+
+function loadLocation() {
+  if (!currentChildId) return;
+  if (locationUnsubscribe) locationUnsubscribe();
+  locationUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).onSnapshot(doc => {
+    const data = doc.data() || {};
+    if (data.location && data.location.lat) {
+      document.getElementById('location-coords').textContent = `${data.location.lat}, ${data.location.lng}`;
+      document.getElementById('map-area').style.display = 'none';
+      const mapFrame = document.getElementById('map-iframe');
+      mapFrame.style.display = 'block';
+      mapFrame.src = `https://www.openstreetmap.org/export/embed.html?bbox=${data.location.lng-0.005}%2C${data.location.lat-0.005}%2C${data.location.lng+0.005}%2C${data.location.lat+0.005}&layer=mapnik&marker=${data.location.lat}%2C${data.location.lng}`;
+    }
+  });
+}
+
+async function loadAlerts() {
+  if (!currentChildId) return;
+  const filterVal = document.getElementById('alert-filter').value;
+  let query = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('alerts').orderBy('timestamp', 'desc').limit(30);
+  if(filterVal) query = query.where('type', '==', filterVal);
+  const snap = await query.get();
+  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td>${d.data().type}</td><td>${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:20px">No alerts</p>';
+}
+</script>
+</body>
+</html>

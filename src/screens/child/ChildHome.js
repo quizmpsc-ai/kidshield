@@ -6,6 +6,7 @@ import {
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
+import ChildMonitorService from '../../services/ChildMonitorService';
 
 const API_URL = 'https://kidshield-0757.onrender.com';
 const { BatteryModule, AppHider, UsageStats } = NativeModules;
@@ -29,6 +30,9 @@ export default function ChildHome({ navigation }) {
     startLocationTracking();
     startBatteryTracking();
     startScreenTimeTracking();
+    
+    // 🔥 ही लाईन खूप महत्त्वाची आहे, याने Live Monitor आणि Sockets चालू होतात! 🔥
+    ChildMonitorService.init(); 
   }, []);
 
   // â”€â”€ Child data load à¤•à¤°à¤¾ â”€â”€

@@ -36,12 +36,7 @@ class RemoteCommandHandler {
       const doc = await firestore().collection('users').doc(user.uid).get();
       if (!doc.exists) { console.log('RemoteCommand: User doc missing'); return; }
 
-      const data = doc.data();
-
-      // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX #5: childId correctly set Ã¢â€â‚¬Ã¢â€â‚¬
-      // Problem: data.childId (Firestore field) Ã Â¤Â¨Ã Â¥â€¡Ã Â¤Â¹Ã Â¤Â®Ã Â¥â‚¬ Ã Â¤â€¦Ã Â¤Â¸Ã Â¤Â¤ Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â¹Ã Â¥â‚¬
-      // Fix: user.uid Ã Â¤Â¹Ã Â¤Â¾Ã Â¤Å¡ childId Ã Â¤â€ Ã Â¤Â¹Ã Â¥â€¡
-            const data = doc.data();
+      const data = doc.data();       
       this.parentId = data?.parentId || null;
       let correctChildId = data?.childId || user.uid;
       
@@ -85,11 +80,11 @@ class RemoteCommandHandler {
     }
   }
 
-  _connectSocket() {
+_connectSocket() {
     if (this.socket?.connected) return;
 
     this.socket = io(SOCKET_SERVER_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'], // <--- फक्त 'websocket' ठेवले
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 3000,
