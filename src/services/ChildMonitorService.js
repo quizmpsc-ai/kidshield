@@ -27,11 +27,12 @@ class ChildMonitorService {
       const userDoc = await firestore().collection('users').doc(this.childId).get();
       this.parentId = userDoc.data()?.parentId;
       this.childDocId = userDoc.data()?.childId || this.childId;
+    console.log('ChildMonitor init: UID=', this.childId, ' DocID=', this.childDocId);
     } catch (e) {}
 
     await this.loadAppRules();
     this.listenForCommands();
-    RemoteCommandHandler.init(); // 🔥 FORCED INIT 🔥
+    RemoteCommandHandler.init(); // ðŸ”¥ FORCED INIT ðŸ”¥
     this.startLocationTracking();
     this.startUsageReporting();
     this.setupBackgroundFetch();
@@ -53,7 +54,7 @@ class ChildMonitorService {
   async loadAppRules() {
     try {
       const snap = await firestore().collection('appRules')
-        .where('childId', '==', this.childId).get();
+        .where('childId', '==', (this.childDocId || this.childId)).get();
       this.appRules = {};
       snap.docs.forEach(d => { this.appRules[d.data().packageName] = d.data(); });
     } catch (e) {}
@@ -77,7 +78,7 @@ class ChildMonitorService {
 
     // Also listen on commands collection
     firestore().collection('commands')
-      .where('childId', '==', this.childId)
+      .where('childId', '==', (this.childDocId || this.childId))
       .where('status', '==', 'pending')
       .onSnapshot(snap => {
         snap.docs.forEach(d => this.executeCommand(d.id, d.data()));
