@@ -1,4 +1,5 @@
 package com.kidshield;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -15,14 +16,12 @@ import android.os.HandlerThread;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
+
 import com.facebook.react.bridge.*;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.FirebaseFirestore;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 public class ScreenMirrorModule extends ReactContextBaseJavaModule implements ActivityEventListener {
     private final ReactApplicationContext reactContext;
@@ -37,24 +36,29 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     private boolean isMirroring = false;
     private int screenWidth, screenHeight, screenDensity;
     private Runnable liveViewRunnable;
-    private FirebaseFirestore db;
-    private String childId;
-    private String parentId;
 
     public ScreenMirrorModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
         context.addActivityEventListener(this);
-        this.db = FirebaseFirestore.getInstance();
+
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
         wm.getDefaultDisplay().getMetrics(metrics);
+        // Reduce resolution for smoother streaming
         screenWidth = metrics.widthPixels / 2;
         screenHeight = metrics.heightPixels / 2;
         screenDensity = metrics.densityDpi;
     }
 
-    @Override public String getName() { return "ScreenMirror"; }
+    @Override
+    public String getName() { return "ScreenMirror"; }
+
+    // (Dummy method for JS compatibility - Firestore logic removed)
+    @ReactMethod
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        promise.resolve(true);
+    }
 
     @ReactMethod
     public void requestPermission(Promise promise) {
@@ -66,21 +70,6 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     }
 
     @ReactMethod
-    public void setChildInfo(String cId, String pId, Promise promise) {
-        this.childId = cId;
-        this.parentId = pId;
-        promise.resolve(true);
-    }
-
-    // â”€â”€ Take single screenshot â”€â”€
-    @ReactMethod
-    public void takeScreenshot(String requestId, Promise promise) {
-        if (mediaProjection == null) { promise.reject("NO_PERMISSION", "No media projection permission"); return; }
-        captureAndUpload(requestId, promise);
-    }
-
-    // â”€â”€ Start continuous live view â”€â”€
-    @ReactMethod
     public void startLiveView(int intervalSeconds, Promise promise) {
         if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Need screen capture permission"); return; }
         if (isMirroring) { promise.resolve(true); return; }
@@ -89,12 +78,13 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         startBackgroundThread();
         setupVirtualDisplay();
 
-        int intervalMs = intervalSeconds * 1000;
+        // Faster interval for sockets (e.g. 500ms instead of 3000ms)
+        int intervalMs = Math.max(500, intervalSeconds * 1000); 
         liveViewRunnable = new Runnable() {
             @Override
             public void run() {
                 if (!isMirroring) return;
-                captureFrameToFirestore();
+                captureFrameAndEmit();
                 handler.postDelayed(this, intervalMs);
             }
         };
@@ -102,7 +92,6 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         promise.resolve(true);
     }
 
-    // â”€â”€ Stop live view â”€â”€
     @ReactMethod
     public void stopLiveView(Promise promise) {
         isMirroring = false;
@@ -129,8 +118,9 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         );
     }
 
-    private void captureFrameToFirestore() {
-        if (imageReader == null || childId == null) return;
+    // NEW: Emits frame directly to JS instead of Firestore
+    private void captureFrameAndEmit() {
+        if (imageReader == null) return;
         try {
             Image image = imageReader.acquireLatestImage();
             if (image == null) return;
@@ -140,85 +130,25 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
             int rowStride = planes[0].getRowStride();
             int pixelStride = planes[0].getPixelStride();
             int w = rowStride / pixelStride;
+            
             Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
             bmp.copyPixelsFromBuffer(buffer);
             image.close();
 
-            // Crop to actual screen size
             if (w > screenWidth) bmp = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            bmp.compress(Bitmap.CompressFormat.JPEG, 40, baos); // Low quality = faster
+            // Lower quality for faster socket transport
+            bmp.compress(Bitmap.CompressFormat.JPEG, 30, baos); 
             String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
 
-            // Save to Firestore - liveFrame field for real-time display
-            Map<String, Object> data = new HashMap<>();
-            data.put("liveFrame", base64);
-            data.put("liveFrameAt", new Date().getTime());
-            data.put("liveType", "screen");
-
-            if (parentId != null && !parentId.isEmpty()) {
-                // families/{parentId}/children/{childId} path
-                db.collection("families").document(parentId)
-                    .collection("children").document(childId)
-                    .update(data);
-            }
-            // Also save to remoteCaptures for history
-            Map<String, Object> capture = new HashMap<>();
-            capture.put("childId", childId);
-            capture.put("screenshotBase64", base64);
-            capture.put("type", "screenshot");
-            capture.put("timestamp", new Date().toString());
-            db.collection("remoteCaptures").add(capture);
+            reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("onScreenFrame", base64);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private void captureAndUpload(String requestId, Promise promise) {
-        startBackgroundThread();
-        setupVirtualDisplay();
-        handler.postDelayed(() -> {
-            try {
-                Image image = imageReader.acquireLatestImage();
-                if (image != null) {
-                    Image.Plane[] planes = image.getPlanes();
-                    ByteBuffer buffer = planes[0].getBuffer();
-                    int rowStride = planes[0].getRowStride();
-                    int pixelStride = planes[0].getPixelStride();
-                    int w = rowStride / pixelStride;
-                    Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
-                    bmp.copyPixelsFromBuffer(buffer);
-                    image.close();
-
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    bmp.compress(Bitmap.CompressFormat.JPEG, 60, baos);
-                    String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
-
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("childId", childId);
-                    data.put("screenshotBase64", base64);
-                    data.put("requestId", requestId);
-                    data.put("type", "screenshot");
-                    data.put("timestamp", new Date().toString());
-                    db.collection("remoteCaptures").add(data)
-                        .addOnSuccessListener(ref -> promise.resolve(ref.getId()))
-                        .addOnFailureListener(e -> promise.reject("UPLOAD_ERROR", e.getMessage()));
-                    releaseResources();
-                } else {
-                    promise.reject("NO_IMAGE", "Could not capture screen");
-                }
-            } catch (Exception e) {
-                promise.reject("ERROR", e.getMessage());
-            }
-        }, 500);
-    }
-
-    private void releaseResources() {
-        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
-        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} imageReader = null; }
-        if (handlerThread != null) { handlerThread.quitSafely(); handlerThread = null; }
     }
 
     @Override
@@ -238,5 +168,12 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
             }
         }
     }
+    
+    private void releaseResources() {
+        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
+        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} imageReader = null; }
+        if (handlerThread != null) { handlerThread.quitSafely(); handlerThread = null; }
+    }
+
     @Override public void onNewIntent(Intent intent) {}
 }
