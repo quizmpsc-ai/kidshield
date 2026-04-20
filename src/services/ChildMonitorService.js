@@ -149,22 +149,78 @@ class ChildMonitorService {
   }
 
   startUsageReporting() {
-    setInterval(async () => {
-      try {
-        const hasPermission = await UsageStats?.hasUsagePermission();
-        if (!hasPermission) return;
+    // Run immediately on start
+    this.syncRealDeviceData();
+    
+    // Sync every 60 seconds
+    setInterval(() => {
+      this.syncRealDeviceData();
+    }, 60 * 1000);
+  }
+
+    async reportSystemError(errorType, message) {
+    if (!this.parentId || !this.childDocId) return;
+    try {
+      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId).collection('alerts').add({
+        type: 'system_error',
+        message: `[${errorType}] ${message}`,
+        timestamp: firestore.FieldValue.serverTimestamp()
+      });
+    } catch(e) {}
+  }
+
+  async syncRealDeviceData() {
+    if (!this.parentId || !this.childDocId) return;
+    const { UsageStats, BatteryModule, KidShieldModule } = NativeModules;
+
+    // 1. SCREEN TIME SYNC
+    try {
+      const hasPermission = await UsageStats?.hasUsagePermission();
+      if (hasPermission) {
         const usageData = await UsageStats.getTodayUsage();
-        if (this.parentId && this.childDocId) {
-          await firestore()
-            .collection('families').doc(this.parentId)
-            .collection('children').doc(this.childDocId)
-            .update({
-              todayMinutes: usageData.totalMinutes || 0,
-              lastSync: firestore.FieldValue.serverTimestamp(),
-            });
-        }
-      } catch (e) {}
-    }, 15 * 60 * 1000);
+        await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
+          .update({
+            todayMinutes: usageData.totalMinutes || 0,
+            lastSync: firestore.FieldValue.serverTimestamp(),
+          });
+      }
+    } catch(e) { this.reportSystemError("Usage Stats", e.message); }
+
+    // 2. REAL BATTERY SYNC
+    try {
+      let batteryLevel = 100;
+      if (BatteryModule && BatteryModule.getBatteryLevel) {
+        const levelStr = await BatteryModule.getBatteryLevel();
+        batteryLevel = parseInt(levelStr) || 100;
+      }
+      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
+        .update({
+          battery: batteryLevel,
+          deviceOnline: true,
+          lastSeen: firestore.FieldValue.serverTimestamp()
+        });
+    } catch(e) { this.reportSystemError("Battery Sync", e.message); }
+
+    // 3. REAL INSTALLED APPS SYNC
+    try {
+      if (KidShieldModule && KidShieldModule.getInstalledApps) {
+        const realApps = await KidShieldModule.getInstalledApps();
+        const batch = firestore().batch();
+        const appsRef = firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId).collection('installed_apps');
+        
+        realApps.forEach(app => {
+          const appData = {
+            id: app.packageName,
+            appName: app.appName,
+            packageName: app.packageName,
+            updatedAt: firestore.FieldValue.serverTimestamp()
+          };
+          // { merge: true } keeps existing "blocked" status intact
+          batch.set(appsRef.doc(app.packageName), appData, { merge: true });
+        });
+        await batch.commit();
+      }
+    } catch(e) { this.reportSystemError("App Sync", e.message); }
   }
 
   setupBackgroundFetch() {

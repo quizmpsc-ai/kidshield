@@ -1,4 +1,9 @@
 package com.kidshield;
+import java.util.List;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableArray;
+import android.content.pm.ApplicationInfo;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -98,5 +103,27 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
             reactContext.startActivity(intent);
             promise.resolve("opened");
         } catch (Exception e) { promise.reject("ERROR", e.getMessage()); }
+    }
+
+    @ReactMethod
+    public void getInstalledApps(Promise promise) {
+        try {
+            PackageManager pm = getReactApplicationContext().getPackageManager();
+            List<ApplicationInfo> packages = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+            WritableArray appList = Arguments.createArray();
+            
+            for (ApplicationInfo packageInfo : packages) {
+                // Only get apps that can be launched (hides background system apps)
+                if (pm.getLaunchIntentForPackage(packageInfo.packageName) != null) {
+                    WritableMap app = Arguments.createMap();
+                    app.putString("packageName", packageInfo.packageName);
+                    app.putString("appName", pm.getApplicationLabel(packageInfo).toString());
+                    appList.pushMap(app);
+                }
+            }
+            promise.resolve(appList);
+        } catch (Exception e) {
+            promise.reject("APP_ERROR", e.getMessage());
+        }
     }
 }

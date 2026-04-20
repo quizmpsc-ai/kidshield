@@ -51,7 +51,7 @@ class RemoteCommandHandler {
         }
     });
     this.socket.on('connect', () => {
-        console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Child Socket Connected:', this.socket.id);
+        console.log('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Child Socket Connected:', this.socket.id);
         this.socket.emit('join_room', { parentId: this.parentId });
     });
 
@@ -95,7 +95,7 @@ class RemoteCommandHandler {
       });
 
     this.isInitialized = true;
-    console.log('ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¯ RemoteCommandHandler Ready (Socket.io Enabled)');
+    console.log('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â¯ RemoteCommandHandler Ready (Socket.io Enabled)');
   }
 
   async handleCommand(commandId, commandData) {
@@ -116,17 +116,21 @@ class RemoteCommandHandler {
         case 'STOP_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.stopLiveCamera();
           break;
-        case 'REQUEST_SCREEN_PERMISSION':
-          if (ScreenMirror) await ScreenMirror.requestPermission();
-          break;
-        case 'START_LIVE_VIEW':
-          if (ScreenMirror) await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+                case 'START_LIVE_VIEW':
+          if (ScreenMirror) {
+             try {
+                await ScreenMirror.requestPermission();
+                await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+             } catch(e) { 
+                if(this.reportSystemError) this.reportSystemError('Screen Mirror', e.message || 'Permission denied'); 
+             }
+          }
           break;
         case 'STOP_LIVE_VIEW':
           if (ScreenMirror) await ScreenMirror.stopLiveView();
           break;
         case 'LOCK_DEVICE':
-          Alert.alert('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬â„¢ Phone Locked', 'Parent ÃƒÂ Ã‚Â¤Ã‚Â¨ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ phone lock ÃƒÂ Ã‚Â¤Ã¢â‚¬Â¢ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¤Ã‚Â¾.', [], { cancelable: false });
+          Alert.alert('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Phone Locked', 'Parent ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¤Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ phone lock ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¤ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¤Ãƒâ€šÃ‚Â²ÃƒÆ’Ã‚Â Ãƒâ€šÃ‚Â¤Ãƒâ€šÃ‚Â¾.', [], { cancelable: false });
           break;
       }
 

@@ -1,66 +1,56 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Anyone can create pairing codes, but only read if they have the code
-    match /pairingCodes/{code} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-    }
-    
-    match /pairing_codes/{code} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-    }
 
+    // Users - only own data
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      match /children/{childId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
     }
 
+    // Families - parent owns, any authenticated user can write children
+    // (needed for pairing - child UID != childId doc ID)
     match /families/{parentId} {
-      allow read, write: if request.auth != null; // Simplified for now, restrict in production
-      
-      match /children/{childId} {
-        allow read, write: if request.auth != null;
-        
-        match /activity/{docId} {
-          allow read, write: if request.auth != null;
-        }
-        match /installed_apps/{appId} {
-          allow read, write: if request.auth != null;
-        }
-        match /blocked_domains/{domain} {
-          allow read, write: if request.auth != null;
-        }
-        match /alerts/{alertId} {
-          allow read, write: if request.auth != null;
-        }
-      }
+      allow read, write: if request.auth != null && request.auth.uid == parentId;
     }
-    
-    match /commands/{commandId} {
+    match /families/{parentId}/children/{childId} {
+      allow read, write: if request.auth != null &&
+        (request.auth.uid == parentId || request.auth != null);
+    }
+    match /families/{parentId}/children/{childId}/{subcollection=**} {
       allow read, write: if request.auth != null;
     }
-    
-    match /locations/{childId} {
+
+    // Pairing codes
+    match /pairing_codes/{code} {
       allow read, write: if request.auth != null;
     }
-    
-    match /usageStats/{statId} {
+    match /pairingCodes/{code} {
       allow read, write: if request.auth != null;
     }
-    
-    match /appRules/{childId} {
+
+    // All other collections - authenticated users only
+    match /users/{parentId}/children/{childId} {
       allow read, write: if request.auth != null;
     }
-    
-    match /alerts/{alertId} {
+    match /usageStats/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /locations/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /appRules/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /commands/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /alerts/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /geofences/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    match /sosEvents/{docId} {
       allow read, write: if request.auth != null;
     }
   }
