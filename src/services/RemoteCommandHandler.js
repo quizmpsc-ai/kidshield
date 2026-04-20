@@ -21,92 +21,84 @@ class RemoteCommandHandler {
   }
 
   async init() {
-    const user = auth().currentUser;
-    if (!user) return;
+    try {
+      const user = auth().currentUser;
+      if (!user) { console.log("RemoteCommand: No user logged in"); return; }
+      
+      console.log("RemoteCommand: Init started for UID", user.uid);
+      
+      const doc = await firestore().collection('users').doc(user.uid).get();
+      if (!doc.exists) { console.log("RemoteCommand: User doc not found"); return; }
+      
+      this.parentId = doc.data()?.parentId || null;
+      this.childId = doc.data()?.childId || user.uid;
+      
+      console.log("RemoteCommand: Parent", this.parentId, "Child", this.childId);
 
-    const doc = await firestore().collection('users').doc(user.uid).get();
-    this.parentId = doc.data()?.parentId || null;
-    // 🔥 FIX: Use exactly the paired childId (e.g., child_177...) instead of Auth UID
-    this.childId = doc.data()?.childId || user.uid; 
+      if (!this.parentId) { console.log("RemoteCommand: No parent linked yet"); return; }
 
-    if (!this.parentId) return;
+      // 1. CONNECT SOCKET
+      try {
+        this.socket = io(SOCKET_SERVER_URL);
+        this.socket.on('connect', () => {
+            console.log('Child Socket Connected:', this.socket.id);
+            this.socket.emit('join_room', { parentId: this.parentId });
+        });
+      } catch(se) { console.log("Socket error:", se); }
 
-    // Connect to WebSockets
-    this.socket = io(SOCKET_SERVER_URL);
-        // SYNC RULES TO NATIVE (For Accessibility Service)
-    this.socket.on('receive_rules', async (rules) => {
-        if (NativeModules.KidShieldModule) {
-            const { KidShieldModule } = NativeModules;
-            if (rules.apps) {
-                rules.apps.forEach(app => KidShieldModule.syncBoolRule("block_" + app.packageName, app.blocked));
-            }
-            if (rules.screenTime) {
-                KidShieldModule.syncIntRule("daily_limit_mins", rules.screenTime.limitMins || 0);
-                KidShieldModule.syncRule("bedtime_start", rules.screenTime.start || "");
-                KidShieldModule.syncRule("bedtime_end", rules.screenTime.end || "");
-            }
-            if (rules.webFilter) {
-                KidShieldModule.syncBoolRule("filter_adult", rules.webFilter.blockAdult || false);
-                KidShieldModule.syncRule("blocked_domains", rules.webFilter.domains || "");
-            }
-        }
-    });
-    this.socket.on('connect', () => {
-        console.log('Child Socket Connected:', this.socket.id);
-        this.socket.emit('join_room', { parentId: this.parentId });
-    });
-
-    // Listen for Native Events (Screen & Camera frames)
-    const eventEmitter = new NativeEventEmitter();
-    
-    this.screenListener = eventEmitter.addListener('onScreenFrame', (base64Frame) => {
-        if (this.socket && this.socket.connected) {
-            this.socket.emit('stream_frame', {
-                parentId: this.parentId,
-                childId: this.childId,
-                frameBase64: base64Frame,
-                type: 'screen'
-            });
-        }
-    });
-
-    this.cameraListener = eventEmitter.addListener('onCameraFrame', (event) => {
-        if (this.socket && this.socket.connected) {
-            this.socket.emit('stream_frame', {
-                parentId: this.parentId,
-                childId: this.childId,
-                frameBase64: event.frame,
-                type: event.type
-            });
-        }
-    });
-
-    this.audioListener = eventEmitter.addListener('onAudioFrame', (base64Audio) => {
-        if (this.socket && this.socket.connected) {
-            this.socket.emit('stream_audio', {
-                parentId: this.parentId,
-                childId: this.childId,
-                audioBase64: base64Audio
-            });
-        }
-    });
-
-    // Set child info in native
-    if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId);
-    if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId);
-    if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId);
-
-    // Listen for Firestore Commands
-    this.unsubscribe = firestore()
-      .collection('commands')
-      .where('childId', '==', this.childId)
-      .where('status', '==', 'pending')
-      .onSnapshot(snap => {
-        snap.docs.forEach(doc => this.handleCommand(doc.id, doc.data()));
+      // 2. NATIVE LISTENERS
+      const eventEmitter = new NativeEventEmitter();
+      
+      if(this.screenListener) this.screenListener.remove();
+      this.screenListener = eventEmitter.addListener('onScreenFrame', (base64Frame) => {
+          if (this.socket && this.socket.connected) {
+              this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: base64Frame, type: 'screen' });
+          }
       });
 
-    this.isInitialized = true;
-    console.log('RemoteCommandHandler Ready (Socket.io Enabled)');
+      if(this.cameraListener) this.cameraListener.remove();
+      this.cameraListener = eventEmitter.addListener('onCameraFrame', (event) => {
+          if (this.socket && this.socket.connected) {
+              this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: event.frame, type: event.type });
+          }
+      });
+
+      if(this.audioListener) this.audioListener.remove();
+      this.audioListener = eventEmitter.addListener('onAudioFrame', (base64Audio) => {
+          if (this.socket && this.socket.connected) {
+              this.socket.emit('stream_audio', { parentId: this.parentId, childId: this.childId, audioBase64: base64Audio });
+          }
+      });
+
+      // 3. SET NATIVE INFO
+      if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId);
+      if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId);
+      if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId);
+
+      // 4. 🔥 BULLETPROOF FIRESTORE COMMAND LISTENER 🔥
+      if (this.unsubscribe) this.unsubscribe();
+      console.log("RemoteCommand: Attaching listener for childId", this.childId);
+      
+      this.unsubscribe = firestore()
+        .collection('commands')
+        .where('childId', '==', this.childId)
+        .where('status', '==', 'pending')
+        .onSnapshot(snap => {
+            console.log("RemoteCommand: Received", snap.docs.length, "pending commands");
+            snap.docs.forEach(doc => {
+               console.log("Executing command:", doc.data().command);
+               this.handleCommand(doc.id, doc.data());
+            });
+        }, error => {
+            console.log("RemoteCommand Listener Error:", error);
+        });
+
+      this.isInitialized = true;
+      console.log('✅ RemoteCommandHandler Fully Ready!');
+      
+    } catch(err) {
+      console.log('❌ RemoteCommand Init Error:', err);
+    }
   }
 
   async handleCommand(commandId, commandData) {
@@ -141,7 +133,7 @@ class RemoteCommandHandler {
           if (ScreenMirror) await ScreenMirror.stopLiveView();
           break;
         case 'LOCK_DEVICE':
-          Alert.alert('Phone Locked', 'Parent locked the phone.Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾.', [], { cancelable: false });
+          Alert.alert('Phone Locked', 'Parent locked the phone.ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾.', [], { cancelable: false });
           break;
       }
 

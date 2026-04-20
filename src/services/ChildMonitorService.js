@@ -4,6 +4,7 @@ import Geolocation from '@react-native-community/geolocation';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import axios from 'axios';
+import RemoteCommandHandler from './RemoteCommandHandler';
 
 const { UsageStats } = NativeModules;
 const API_URL = 'https://kidshield-0757.onrender.com';
@@ -30,6 +31,7 @@ class ChildMonitorService {
 
     await this.loadAppRules();
     this.listenForCommands();
+    RemoteCommandHandler.init(); // 🔥 FORCED INIT 🔥
     this.startLocationTracking();
     this.startUsageReporting();
     this.setupBackgroundFetch();
