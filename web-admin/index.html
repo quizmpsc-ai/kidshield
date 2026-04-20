@@ -361,8 +361,11 @@
           <h3 class="section-title" id="live-section-title">&#128249; Live Feed</h3>
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
-        <div class="stream-area" id="stream-area">`n          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">🔇 Turn Audio ON</button>
-          <p style="color:var(--muted)">Select a feature above to start monitoring</p>
+                <div class="stream-area" id="stream-area" style="position:relative;">
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">🔊 Turn Audio ON</button>
+          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+             <p style="color:var(--muted)">Select a feature above to start monitoring</p>
+          </div>
         </div>
       </div>
     </div>
@@ -510,16 +513,16 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('âœ… Web Admin connected to Socket.io');
+        console.log('Ã¢Å“â€¦ Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
       socket.on('receive_frame', data => {
         // Only display if the frame matches the selected child and active feature
         if (data.childId === currentChildId && (data.type === currentLiveMode || (currentLiveMode === 'screen' && data.type === 'screen'))) {
-          const streamArea = document.getElementById('stream-area');
+          const streamContent = document.getElementById('stream-content');
   document.getElementById('audio-toggle-btn').style.display = 'block';
-          streamArea.innerHTML = '<img src="data:image/jpeg;base64,' + data.frameBase64 + '" style="max-width:100%;height:100%;object-fit:contain;border-radius:12px" />';
+          streamContent.innerHTML = '<img src="data:image/jpeg;base64,' + data.frameBase64 + '" style="max-width:100%;height:100%;object-fit:contain;border-radius:12px" />';
           const statusEl = document.getElementById('status-' + currentLiveMode);
           if (statusEl) { statusEl.textContent = 'Live'; statusEl.className = 'live-status on'; }
         }
@@ -603,11 +606,11 @@ function toggleAudioStream() {
   const btn = document.getElementById('audio-toggle-btn');
   
   if (isAudioActive) {
-    btn.textContent = '🔊 Mute Audio';
+    btn.textContent = 'ðŸ”Š Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
   } else {
-    btn.textContent = '🔇 Turn Audio ON';
+    btn.textContent = 'ðŸ”‡ Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -649,9 +652,9 @@ function toggleLive(mode) {
   };
   document.getElementById('live-section-title').innerHTML = titles[mode] || 'Live Feed';
 
-  const streamArea = document.getElementById('stream-area');
+  const streamContent = document.getElementById('stream-content');
   document.getElementById('audio-toggle-btn').style.display = 'block';
-  streamArea.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Connecting via WebSockets...</p><p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open</p></div>';
+  streamContent.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Connecting via WebSockets...</p><p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open</p></div>';
 
   // Send Command to Child App
   if (mode === 'screen') {
@@ -793,6 +796,13 @@ function selectChild(childId, tabEl) {
   tabEl.classList.add('active');
   stopAllLive();
   loadChildData();
+  
+  // 🔥 FIX: Refresh the currently active section for the new child
+  const activeNav = document.querySelector('.nav-item.active');
+  if (activeNav) {
+      const sectionName = activeNav.id.replace('nav-', '');
+      showSection(sectionName); 
+  }
 }
 
 function loadChildData() {
