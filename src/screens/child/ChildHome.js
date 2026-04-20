@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, Animated, Vibration, Modal,
+  ScrollView, Alert, Animated, Vibration, NativeModules,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
-import { NativeModules } from 'react-native';
 
-const { BatteryModule } = NativeModules;
 const API_URL = 'https://kidshield-0757.onrender.com';
+const { BatteryModule, AppHider, UsageStats } = NativeModules;
 
 export default function ChildHome({ navigation }) {
   const [screenTime, setScreenTime] = useState(0);
@@ -19,27 +18,20 @@ export default function ChildHome({ navigation }) {
   const [childDocId, setChildDocId] = useState(null);
   const [sosActive, setSosActive] = useState(false);
   const [location, setLocation] = useState(null);
-  const [setupDone, setSetupDone] = useState(false);
   const [battery, setBattery] = useState(null);
+  const [adminEnabled, setAdminEnabled] = useState(false);
   const sosAnim = useRef(new Animated.Value(1)).current;
   const screenTimeRef = useRef(0);
-  const parentIdRef = useRef(null);
-  const childDocIdRef = useRef(null);
+  const blockedRef = useRef(0);
 
   useEffect(() => {
     loadChildData();
     startLocationTracking();
     startBatteryTracking();
-
-    const screenInterval = setInterval(() => {
-      screenTimeRef.current += 1;
-      setScreenTime(screenTimeRef.current);
-      if (screenTimeRef.current % 5 === 0) saveScreenTime(screenTimeRef.current);
-    }, 60000);
-
-    return () => clearInterval(screenInterval);
+    startScreenTimeTracking();
   }, []);
 
+  // ── Child data load करा ──
   const loadChildData = async () => {
     try {
       const uid = auth().currentUser?.uid;
@@ -50,136 +42,207 @@ export default function ChildHome({ navigation }) {
         setChildName(data.name || 'Child');
         setParentId(data.parentId || null);
         setChildDocId(data.childId || null);
-        parentIdRef.current = data.parentId || null;
-        childDocIdRef.current = data.childId || null;
         setLimit(data.screenTimeLimit || 120);
         screenTimeRef.current = data.screenTime || 0;
         setScreenTime(data.screenTime || 0);
-        setSetupDone(data.setupDone || false);
+
+        // Admin check
+        if (AppHider) {
+          const isAdmin = await AppHider.isDeviceAdminActive();
+          setAdminEnabled(isAdmin);
+        }
       }
     } catch (e) { console.error('Load error:', e); }
   };
 
+  // ── Battery tracking ──
   const startBatteryTracking = async () => {
     const updateBattery = async () => {
       try {
-        let level = 100;
-        // Try native battery module first
-        if (BatteryModule && BatteryModule.getBatteryLevel) {
-          level = await BatteryModule.getBatteryLevel();
+        if (BatteryModule) {
+          const level = await BatteryModule.getBatteryLevel();
+          setBattery(level);
+          return level;
         }
-        setBattery(level);
-        // Save to families collection
-        const pId = parentIdRef.current;
-        const cId = childDocIdRef.current;
-        if (pId && cId) {
-          await firestore()
-            .collection('families').doc(pId)
-            .collection('children').doc(cId)
-            .update({
-              battery: Math.round(level),
-              deviceOnline: true,
-              lastSeen: firestore.FieldValue.serverTimestamp(),
-            });
-        }
-      } catch (e) {
-        // Fallback: estimate from charging status
-        setBattery(85);
-      }
+      } catch (e) {}
+      return null;
     };
-    updateBattery();
-    setInterval(updateBattery, 5 * 60 * 1000); // Every 5 minutes
+
+    // Immediately fetch
+    const level = await updateBattery();
+
+    // हर 5 minutes update करा
+    setInterval(updateBattery, 5 * 60 * 1000);
+    return level;
   };
 
-  const saveScreenTime = async (minutes) => {
+  // ── Screen time tracking ──
+  const startScreenTimeTracking = () => {
+    const interval = setInterval(async () => {
+      screenTimeRef.current += 1;
+      setScreenTime(screenTimeRef.current);
+
+      // हर 5 minutes Firebase ला push करा
+      if (screenTimeRef.current % 5 === 0) {
+        await pushDataToFirebase();
+      }
+    }, 60000); // 1 minute
+
+    // पहिल्यांदा 30 seconds नंतर push करा
+    setTimeout(() => pushDataToFirebase(), 30000);
+
+    return () => clearInterval(interval);
+  };
+
+  // ── सगळा data Firebase families collection मध्ये push करा ──
+  const pushDataToFirebase = async () => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return;
-      const pId = parentIdRef.current;
-      const cId = childDocIdRef.current;
+      if (!uid || !parentId) return;
 
-      // Save to users collection
+      // Battery get करा
+      let batteryLevel = battery;
+      if (BatteryModule && batteryLevel === null) {
+        batteryLevel = await BatteryModule.getBatteryLevel();
+        setBattery(batteryLevel);
+      }
+
+      // Usage stats (if available)
+      let usageApps = [];
+      try {
+        if (UsageStats) {
+          const hasPerms = await UsageStats.hasUsagePermission();
+          if (hasPerms) {
+            const usage = await UsageStats.getTodayUsage();
+            usageApps = usage.apps || [];
+          }
+        }
+      } catch (e) {}
+
+      const now = new Date();
+      const updateData = {
+        // Screen time
+        screenTime: screenTimeRef.current,
+        screenTimeMinutes: screenTimeRef.current,
+
+        // Battery — real device data
+        battery: batteryLevel !== null ? batteryLevel : null,
+        batteryLevel: batteryLevel !== null ? batteryLevel : null,
+
+        // Blocked attempts
+        blockedAttempts: blockedRef.current,
+
+        // Status
+        isOnline: true,
+        lastSeen: firestore.FieldValue.serverTimestamp(),
+        lastUpdated: firestore.FieldValue.serverTimestamp(),
+
+        // App usage
+        appsUsed: usageApps.length,
+        topApps: usageApps.slice(0, 5),
+      };
+
+      // 1. families/{parentId}/children/{childDocId} update करा (Web Admin साठी)
+      if (childDocId) {
+        await firestore()
+          .collection('families')
+          .doc(parentId)
+          .collection('children')
+          .doc(childDocId)
+          .update(updateData);
+      }
+
+      // 2. users/{uid} पण update करा (Android app साठी)
       await firestore().collection('users').doc(uid).update({
-        screenTime: minutes,
+        screenTime: screenTimeRef.current,
+        battery: batteryLevel,
+        isOnline: true,
         lastActive: firestore.FieldValue.serverTimestamp(),
       });
 
-      // Save to families collection (web admin reads from here)
-      if (pId && cId) {
-        await firestore()
-          .collection('families').doc(pId)
-          .collection('children').doc(cId)
-          .update({
-            todayMinutes: minutes,
-            lastSync: firestore.FieldValue.serverTimestamp(),
-          });
-      }
+      console.log('Data pushed:', { screenTime: screenTimeRef.current, battery: batteryLevel });
 
-      // Alert if 80% limit reached
-      if ((minutes / limit) * 100 >= 80 && pId) {
-        await firestore().collection('families').doc(pId)
-          .collection('children').doc(cId)
-          .collection('alerts').add({
-            type: 'screen_time',
-            message: `${childName} used ${minutes} of ${limit} minutes today`,
-            severity: 'warning',
-            timestamp: firestore.FieldValue.serverTimestamp(),
-          });
-        // Also save globally
-        await firestore().collection('alerts').add({
-          childId: uid, childName, parentId: pId,
-          title: 'Screen Time Warning',
-          body: `${childName} has used ${minutes} of ${limit} minutes today`,
-          type: 'screen_time', severity: 'medium',
-          read: false,
-          timestamp: firestore.FieldValue.serverTimestamp(),
-        });
-      }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Push error:', e);
+    }
   };
 
+  // ── Location tracking ──
   const startLocationTracking = () => {
     Geolocation.requestAuthorization();
     Geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         setLocation({ latitude, longitude, accuracy });
-        sendLocationToFirestore(latitude, longitude, accuracy);
+        sendLocationToFirebase(latitude, longitude, accuracy);
       },
       (err) => console.log('GPS error:', err),
       { enableHighAccuracy: false, distanceFilter: 50, interval: 120000 }
     );
+
+    // Initial position
+    Geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setLocation({ latitude, longitude, accuracy });
+        sendLocationToFirebase(latitude, longitude, accuracy);
+      },
+      (err) => console.log('Initial GPS error:', err),
+      { enableHighAccuracy: false, timeout: 15000 }
+    );
   };
 
-  const sendLocationToFirestore = async (lat, lng, accuracy) => {
+  const sendLocationToFirebase = async (lat, lng, accuracy) => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return;
-      const pId = parentIdRef.current;
-      const cId = childDocIdRef.current;
+      if (!uid || !parentId) return;
 
-      // Save to locations collection
+      // Reverse geocoding (simple)
+      let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          { headers: { 'User-Agent': 'KidShield/1.0' } }
+        );
+        const data = await resp.json();
+        if (data?.display_name) {
+          const parts = data.display_name.split(',');
+          locationName = parts.slice(0, 3).join(',').trim();
+        }
+      } catch (e) {}
+
+      const locationData = {
+        location: { lat, lng, accuracy },
+        locationName,
+        locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
+        lat, lng, // backward compat
+      };
+
+      // 1. families collection update (Web Admin)
+      if (childDocId) {
+        await firestore()
+          .collection('families').doc(parentId)
+          .collection('children').doc(childDocId)
+          .update(locationData);
+      }
+
+      // 2. locations collection (separate real-time tracking)
       await firestore().collection('locations').doc(uid).set({
-        lat, lng, accuracy, childId: uid,
+        lat, lng, accuracy, childId: uid, parentId,
+        locationName,
         timestamp: firestore.FieldValue.serverTimestamp(),
       });
 
-      // Save to families collection (web admin reads from here)
-      if (pId && cId) {
-        await firestore()
-          .collection('families').doc(pId)
-          .collection('children').doc(cId)
-          .update({
-            location: { lat, lng },
-            locationName: lat.toFixed(4) + ', ' + lng.toFixed(4),
-            locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
-          });
-      }
-    } catch (e) {}
+    } catch (e) { console.error('Location error:', e); }
   };
 
+  // ── SOS ──
   const handleSOSPress = () => {
     Vibration.vibrate([0, 200, 100, 200]);
+    Animated.sequence([
+      Animated.timing(sosAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+      Animated.timing(sosAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
     Alert.alert('SOS Alert', 'Send emergency alert to parent?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Send SOS', style: 'destructive', onPress: sendSOS },
@@ -190,24 +253,54 @@ export default function ChildHome({ navigation }) {
     try {
       setSosActive(true);
       const uid = auth().currentUser?.uid;
-      const pId = parentIdRef.current;
-      const cId = childDocIdRef.current;
-      if (location) await sendLocationToFirestore(location.latitude, location.longitude, location.accuracy);
+
+      // Location पण include करा
+      if (location) {
+        await sendLocationToFirebase(location.latitude, location.longitude, location.accuracy);
+      }
+
+      // Alert firestore मध्ये
       await firestore().collection('alerts').add({
-        childId: uid, childName, parentId: pId,
-        title: 'SOS Alert!', body: `${childName} needs help!`,
-        type: 'SOS', severity: 'high', read: false,
+        childId: uid,
+        childName,
+        parentId,
+        title: 'SOS Alert!',
+        body: `${childName} needs help!`,
+        message: `${childName} needs help!`,
+        type: 'SOS',
+        severity: 'high',
+        read: false,
         timestamp: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        location: location ? { lat: location.latitude, lng: location.longitude } : null,
       });
-      if (pId && cId) {
-        await firestore().collection('families').doc(pId)
-          .collection('children').doc(cId)
-          .collection('alerts').add({
-            type: 'SOS', severity: 'high',
-            message: `${childName} needs help!`,
+
+      // families मध्ये recent activity add करा
+      if (childDocId && parentId) {
+        await firestore()
+          .collection('families').doc(parentId)
+          .collection('children').doc(childDocId)
+          .collection('activity').add({
+            type: 'SOS',
+            description: 'SOS button pressed',
             timestamp: firestore.FieldValue.serverTimestamp(),
           });
       }
+
+      // Backend notify करा
+      try {
+        await fetch(`${API_URL}/api/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parentId,
+            title: 'SOS Alert!',
+            body: `${childName} needs help immediately!`,
+            data: { type: 'SOS', childId: uid }
+          }),
+        });
+      } catch (e) {}
+
       Alert.alert('SOS Sent', 'Your parent has been notified!');
     } catch (e) {
       Alert.alert('Error', 'Could not send SOS. Check internet.');
@@ -224,70 +317,73 @@ export default function ChildHome({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.greeting}>Hello, {childName}!</Text>
           <Text style={styles.date}>{new Date().toDateString()}</Text>
-          {battery !== null && (
-            <Text style={styles.batteryText}>Battery: {Math.round(battery)}%</Text>
-          )}
         </View>
 
         {!parentId && (
-          <TouchableOpacity style={styles.linkBanner} onPress={() => navigation.navigate('Pairing')}>
+          <TouchableOpacity style={styles.linkBanner}
+            onPress={() => navigation.navigate('Pairing')}>
+            <Text style={styles.linkBannerIcon}>🔗</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.linkBannerTitle}>Link to Parent</Text>
-              <Text style={styles.linkBannerText}>Tap here to enter pairing code</Text>
+              <Text style={styles.linkBannerText}>Tap to enter pairing code</Text>
             </View>
-            <Text style={{ color: '#00d4ff', fontSize: 20 }}>{'>'}</Text>
+            <Text style={{ color: '#00d4ff', fontSize: 20 }}>→</Text>
           </TouchableOpacity>
         )}
 
-        {parentId && !setupDone && (
-          <TouchableOpacity style={styles.setupBanner} onPress={() => navigation.navigate('SetupWizard')}>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.setupBannerTitle}>Complete Setup</Text>
-              <Text style={styles.setupBannerText}>Enable protection features</Text>
-            </View>
-            <Text style={{ color: '#ff9900', fontSize: 20 }}>{'>'}</Text>
-          </TouchableOpacity>
-        )}
-
+        {/* Screen Time Card */}
         <View style={[styles.card, isNearLimit && styles.cardWarning]}>
-          <Text style={styles.cardLabel}>Today's Screen Time</Text>
+          <Text style={styles.cardLabel}>Today Screen Time</Text>
           <Text style={styles.timeValue}>
             {Math.floor(screenTime / 60)}h {screenTime % 60}m
             <Text style={styles.timeLimit}> / {Math.floor(limit / 60)}h {limit % 60}m</Text>
           </Text>
           <View style={styles.progressBg}>
-            <View style={[styles.progressFill, { width: `${percentage}%` }, isNearLimit && { backgroundColor: '#ff4444' }]} />
+            <View style={[styles.progressFill,
+              { width: `${percentage}%` },
+              isNearLimit && { backgroundColor: '#ff4444' }
+            ]} />
           </View>
           <Text style={[styles.timeLeftText, isNearLimit && { color: '#ff4444' }]}>
-            {isNearLimit ? `Warning: Only ${timeLeft} minutes left!` : `${timeLeft} minutes remaining`}
+            {isNearLimit ? `Warning: Only ${timeLeft} min left!` : `${timeLeft} min remaining`}
           </Text>
         </View>
 
+        {/* Status Row */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Status</Text>
           <View style={styles.statusRow}>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{'>'}</Text>
-              <Text style={styles.statusText}>{location ? 'GPS\nActive' : 'GPS\nPending'}</Text>
+              <Text style={styles.statusIcon}>🔋</Text>
+              <Text style={styles.statusText}>{battery !== null ? `${battery}%` : '...'}</Text>
+              <Text style={styles.statusLabel}>Battery</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{'B'}</Text>
-              <Text style={styles.statusText}>{battery !== null ? `${Math.round(battery)}%\nBattery` : 'Battery\n--'}</Text>
+              <Text style={styles.statusIcon}>📍</Text>
+              <Text style={styles.statusText}>{location ? 'Active' : 'Pending'}</Text>
+              <Text style={styles.statusLabel}>Location</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={[styles.statusText, { color: parentId ? '#00cc88' : '#ff9900' }]}>
-                {parentId ? 'Parent\nLinked' : 'Not\nLinked'}
-              </Text>
+              <Text style={styles.statusIcon}>{adminEnabled ? '🔒' : '🛡️'}</Text>
+              <Text style={styles.statusText}>{adminEnabled ? 'Protected' : 'Basic'}</Text>
+              <Text style={styles.statusLabel}>Security</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusIcon}>{parentId ? '✅' : '❌'}</Text>
+              <Text style={styles.statusText}>{parentId ? 'Linked' : 'Not Linked'}</Text>
+              <Text style={styles.statusLabel}>Parent</Text>
             </View>
           </View>
         </View>
 
+        {/* SOS Button */}
         <View style={styles.sosContainer}>
-          <Text style={styles.sosLabel}>Emergency - Press to alert parent:</Text>
+          <Text style={styles.sosLabel}>Emergency:</Text>
           <Animated.View style={{ transform: [{ scale: sosAnim }] }}>
             <TouchableOpacity
               style={[styles.sosBtn, sosActive && { opacity: 0.6 }]}
               onPress={handleSOSPress} disabled={sosActive} activeOpacity={0.8}>
+              <Text style={styles.sosIcon}>🆘</Text>
               <Text style={styles.sosBtnText}>SOS</Text>
               <Text style={styles.sosSubText}>Press to alert parent</Text>
             </TouchableOpacity>
@@ -295,11 +391,11 @@ export default function ChildHome({ navigation }) {
         </View>
 
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>About KidShield</Text>
-          <Text style={styles.infoText}>Your parent can see your location</Text>
-          <Text style={styles.infoText}>App usage is tracked daily</Text>
-          <Text style={styles.infoText}>Some apps may be restricted</Text>
-          <Text style={styles.infoText}>Use SOS button in emergencies</Text>
+          <Text style={styles.infoTitle}>ℹ️ KidShield Active</Text>
+          <Text style={styles.infoText}>• Location shared with parent</Text>
+          <Text style={styles.infoText}>• Screen time: {screenTime} minutes today</Text>
+          <Text style={styles.infoText}>• Battery: {battery !== null ? `${battery}%` : 'reading...'}</Text>
+          <Text style={styles.infoText}>• To open hidden app: dial *#1234#</Text>
         </View>
       </ScrollView>
     </View>
@@ -311,21 +407,14 @@ const styles = StyleSheet.create({
   header: { marginBottom: 16 },
   greeting: { fontSize: 26, fontWeight: '700', color: '#ffffff', marginBottom: 4 },
   date: { fontSize: 13, color: '#8899aa' },
-  batteryText: { fontSize: 12, color: '#00cc88', marginTop: 4 },
   linkBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: 'rgba(0,212,255,0.08)', borderRadius: 14, padding: 16,
     marginBottom: 16, borderWidth: 1.5, borderColor: '#00d4ff',
   },
+  linkBannerIcon: { fontSize: 24 },
   linkBannerTitle: { fontSize: 15, fontWeight: '700', color: '#00d4ff', marginBottom: 2 },
   linkBannerText: { fontSize: 12, color: '#8899aa' },
-  setupBanner: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,153,0,0.08)', borderRadius: 14, padding: 16,
-    marginBottom: 16, borderWidth: 1.5, borderColor: '#ff9900',
-  },
-  setupBannerTitle: { fontSize: 15, fontWeight: '700', color: '#ff9900', marginBottom: 2 },
-  setupBannerText: { fontSize: 12, color: '#8899aa' },
   card: {
     backgroundColor: '#111d35', borderRadius: 16, padding: 20,
     marginBottom: 16, borderWidth: 1, borderColor: '#1e2d4a',
@@ -339,15 +428,17 @@ const styles = StyleSheet.create({
   timeLeftText: { fontSize: 13, color: '#00d4ff' },
   statusRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
   statusItem: { alignItems: 'center' },
-  statusIcon: { fontSize: 28, marginBottom: 6 },
-  statusText: { fontSize: 12, color: '#8899aa', textAlign: 'center' },
+  statusIcon: { fontSize: 24, marginBottom: 4 },
+  statusText: { fontSize: 13, color: '#ffffff', fontWeight: '600' },
+  statusLabel: { fontSize: 11, color: '#8899aa', marginTop: 2 },
   sosContainer: { alignItems: 'center', marginVertical: 20 },
-  sosLabel: { fontSize: 13, color: '#8899aa', marginBottom: 16, textAlign: 'center' },
+  sosLabel: { fontSize: 13, color: '#8899aa', marginBottom: 16 },
   sosBtn: {
     width: 140, height: 140, borderRadius: 70,
     backgroundColor: '#1a0000', borderWidth: 3, borderColor: '#ff0000',
     alignItems: 'center', justifyContent: 'center', elevation: 8,
   },
+  sosIcon: { fontSize: 36, marginBottom: 4 },
   sosBtnText: { fontSize: 22, fontWeight: '700', color: '#ff0000' },
   sosSubText: { fontSize: 10, color: '#ff6666', marginTop: 2 },
   infoCard: {
