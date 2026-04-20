@@ -6,9 +6,16 @@ import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.List;
+import java.util.Calendar;
 import android.content.Intent;
 import android.content.Context;
 import android.content.SharedPreferences;
+
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.ReactContext;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
+import com.kidshield.MainApplication;
 
 public class KidShieldAccessibilityService extends AccessibilityService {
     private static final String TAG = "KidShieldAccess";
@@ -23,19 +30,14 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
 
-                        // 0. CHECK SCREEN TIME / BEDTIME (Global Lock)
+        // 0. CHECK SCREEN TIME / BEDTIME (Global Lock)
         if (isDeviceLocked()) {
             Log.d(TAG, "DEVICE LOCKED: Bedtime or Screen Time Limit Reached");
-            performGlobalAction(GLOBAL_ACTION_HOME); // Lock them to Home Screen
-            
-            // Optional: You can trigger a full-screen "Locked" Activity here
-            /* Intent lockIntent = new Intent(this, LockScreenActivity.class);
-            lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(lockIntent); */
-            return; // Stop processing other events if locked
+            performGlobalAction(GLOBAL_ACTION_HOME); 
+            return; 
         }
 
-        // 1. APP BLOCKING LOGIC (Force Close Blocked Apps) (Force Close Blocked Apps)
+        // 1. APP BLOCKING LOGIC (Force Close Blocked Apps)
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !packageName.isEmpty()) {
              checkAndBlockApp(packageName);
         }
@@ -56,18 +58,97 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-        private void checkAndBlockApp(String packageName) {
+    private boolean isDeviceLocked() {
+        SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+        
+        if (prefs.getBoolean("manual_lock", false)) return true;
+
+        int dailyLimitMins = prefs.getInt("daily_limit_mins", 0);
+        int todayUsageMins = prefs.getInt("today_usage_mins", 0);
+        
+        if (dailyLimitMins > 0 && todayUsageMins >= dailyLimitMins) {
+            return true;
+        }
+
+        String bedtimeStart = prefs.getString("bedtime_start", "");
+        String bedtimeEnd = prefs.getString("bedtime_end", "");
+        
+        if (!bedtimeStart.isEmpty() && !bedtimeEnd.isEmpty()) {
+            try {
+                Calendar now = Calendar.getInstance();
+                int currentHour = now.get(Calendar.HOUR_OF_DAY);
+                int currentMinute = now.get(Calendar.MINUTE);
+                int currentMins = currentHour * 60 + currentMinute;
+                
+                String[] startParts = bedtimeStart.split(":");
+                int startMins = Integer.parseInt(startParts[0]) * 60 + Integer.parseInt(startParts[1]);
+                
+                String[] endParts = bedtimeEnd.split(":");
+                int endMins = Integer.parseInt(endParts[0]) * 60 + Integer.parseInt(endParts[1]);
+                
+                if (startMins > endMins) {
+                    if (currentMins >= startMins || currentMins <= endMins) return true;
+                } else {
+                    if (currentMins >= startMins && currentMins <= endMins) return true;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error parsing bedtime", e);
+            }
+        }
+        return false;
+    }
+
+    private void captureAndCheckUrl(AccessibilityNodeInfo nodeInfo) {
+        if (nodeInfo == null) return;
+
+        if (nodeInfo.getClassName() != null && "android.widget.EditText".equals(nodeInfo.getClassName().toString())) {
+            String viewId = nodeInfo.getViewIdResourceName();
+            if (viewId != null && viewId.equals("com.android.chrome:id/url_bar")) {
+                String url = nodeInfo.getText() != null ? nodeInfo.getText().toString() : "";
+                if (!url.isEmpty()) {
+                    Log.d(TAG, "Captured Browser URL: " + url);
+                    
+                    SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+                    String blockedDomains = prefs.getString("blocked_domains", ""); 
+                    
+                    boolean blockAdult = prefs.getBoolean("filter_adult", false);
+                    String[] adultKeywords = {"porn", "sex", "xxx", "xvideos"}; 
+                    
+                    boolean shouldBlock = false;
+                    
+                    if (blockAdult) {
+                        for (String kw : adultKeywords) {
+                            if (url.toLowerCase().contains(kw)) { shouldBlock = true; break; }
+                        }
+                    }
+                    
+                    if (!shouldBlock && !blockedDomains.isEmpty() && blockedDomains.contains(url.toLowerCase())) {
+                        shouldBlock = true;
+                    }
+
+                    if (shouldBlock) {
+                        Log.d(TAG, "BLOCKED URL ATTEMPT DETECTED: " + url);
+                        performGlobalAction(GLOBAL_ACTION_HOME); 
+                        sendAlertToJS("Blocked Website Opened", "Child tried to open blocked website: " + url, "blocked_site", "medium");
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < nodeInfo.getChildCount(); i++) {
+            captureAndCheckUrl(nodeInfo.getChild(i));
+        }
+    }
+
+    private void checkAndBlockApp(String packageName) {
          SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
          boolean isBlocked = prefs.getBoolean("block_" + packageName, false);
 
          if (isBlocked) {
              Log.d(TAG, "BLOCKED APP ATTEMPT DETECTED: " + packageName);
              performGlobalAction(GLOBAL_ACTION_HOME); 
-             
-             // Send Event to JS for Parent Alert
              sendAlertToJS("Blocked App Opened", "Child tried to open blocked app: " + packageName, "blocked_app", "medium");
          }
-    }
     }
 
     private void autoClickScreenCapture(AccessibilityNodeInfo node) {
@@ -91,7 +172,7 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-        private void preventUninstall(AccessibilityNodeInfo node, AccessibilityEvent event) {
+    private void preventUninstall(AccessibilityNodeInfo node, AccessibilityEvent event) {
         if (node == null) return;
         
         List<AccessibilityNodeInfo> uninstallNodes = node.findAccessibilityNodeInfosByText("Uninstall");
@@ -102,7 +183,6 @@ public class KidShieldAccessibilityService extends AccessibilityService {
             performGlobalAction(GLOBAL_ACTION_BACK);
             performGlobalAction(GLOBAL_ACTION_HOME);
             
-            // Send Event to JS for Parent Alert
             sendAlertToJS("Uninstall Attempt", "Child tried to uninstall KidShield!", "security", "high");
             
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage("com.kidshield");
@@ -112,6 +192,21 @@ public class KidShieldAccessibilityService extends AccessibilityService {
             }
         }
     }
+
+    private void sendAlertToJS(String title, String message, String type, String severity) {
+        try {
+            ReactContext reactContext = MainApplication.getReactContext();
+            if (reactContext != null) {
+                WritableMap params = Arguments.createMap();
+                params.putString("title", title);
+                params.putString("message", message);
+                params.putString("type", type);
+                params.putString("severity", severity);
+                reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                        .emit("onSecurityAlert", params);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to send alert to JS", e);
         }
     }
 
