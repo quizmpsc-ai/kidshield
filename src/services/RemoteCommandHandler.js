@@ -1,4 +1,5 @@
-import { NativeModules, Alert, PermissionsAndroid, Platform } from 'react-native';
+// src/services/RemoteCommandHandler.js
+import { NativeModules, Alert, PermissionsAndroid } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
@@ -8,177 +9,160 @@ class RemoteCommandHandler {
   constructor() {
     this.isInitialized = false;
     this.unsubscribe = null;
-    this.parentId = null;
-    this.childDocId = null;
     this.childId = null;
+    this.parentId = null;
   }
 
   async init() {
-    const uid = auth().currentUser?.uid;
-    if (!uid) return;
-    this.childId = uid;
+    const user = auth().currentUser;
+    if (!user) return;
+    this.childId = user.uid;
 
-    // Get parent info
-    try {
-      const doc = await firestore().collection('users').doc(uid).get();
-      this.parentId = doc.data()?.parentId;
-      this.childDocId = doc.data()?.childId;
-    } catch (e) {}
+    // Get parentId from Firestore
+    const doc = await firestore().collection('users').doc(user.uid).get();
+    this.parentId = doc.data()?.parentId || null;
 
-    // Pass child info to native modules
-    if (this.parentId && this.childDocId) {
-      try {
-        await RemoteCamera?.setChildInfo?.(uid, this.parentId, this.childDocId);
-        await AmbientAudio?.setChildInfo?.(uid, this.parentId, this.childDocId);
-        await ScreenMirror?.setChildInfo?.(uid, this.parentId, this.childDocId);
-      } catch (e) {}
-    }
+    // Set child/parent info in native modules
+    if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId || '');
+    if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId || '');
+    if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId || '');
 
-    // Listen on families collection (web admin sends liveCommand here)
-    if (this.parentId && this.childDocId) {
-      const familiesUnsub = firestore()
-        .collection('families').doc(this.parentId)
-        .collection('children').doc(this.childDocId)
-        .onSnapshot(async doc => {
-          const data = doc.data() || {};
-          const cmd = data.liveCommand;
-          if (cmd && cmd !== 'stop' && cmd !== this.lastFamiliesCommand) {
-            this.lastFamiliesCommand = cmd;
-            await this.handleLiveCommand(cmd);
-          }
-          if (cmd === 'stop' && this.lastFamiliesCommand !== 'stop') {
-            this.lastFamiliesCommand = 'stop';
-            await this.stopAllLive();
-          }
-        });
-      this.unsubscribeFamilies = familiesUnsub;
-    }
-
-    // Also listen commands collection
+    // Listen for commands
     this.unsubscribe = firestore()
       .collection('commands')
-      .where('childId', '==', uid)
+      .where('childId', '==', this.childId)
       .where('status', '==', 'pending')
       .onSnapshot(snap => {
         snap.docs.forEach(doc => this.handleCommand(doc.id, doc.data()));
       });
 
     this.isInitialized = true;
-  }
-
-  async handleLiveCommand(command) {
-    try {
-      if (command === 'screen') {
-        await this.requestScreenPermission();
-        await ScreenMirror?.startLiveView?.(3);
-      } else if (command === 'camera') {
-        await this.requestCameraPermission();
-        await RemoteCamera?.takeFrontSnapshot?.('live');
-        // Keep taking snapshots every 3 seconds
-        this.cameraInterval = setInterval(async () => {
-          if (this.lastFamiliesCommand === 'camera') {
-            await RemoteCamera?.takeFrontSnapshot?.('live').catch(() => {});
-          } else {
-            clearInterval(this.cameraInterval);
-          }
-        }, 3000);
-      } else if (command === 'audio') {
-        await this.requestAudioPermission();
-        await AmbientAudio?.startAmbientCapture?.('live');
-      } else if (command === 'keylog') {
-        // Keylog handled by AccessibilityService
-      }
-    } catch (e) {
-      console.log('Live command error:', e.message);
-    }
-  }
-
-  async stopAllLive() {
-    try {
-      await ScreenMirror?.stopLiveView?.();
-      await AmbientAudio?.stopAmbientCapture?.();
-      if (this.cameraInterval) clearInterval(this.cameraInterval);
-    } catch (e) {}
-  }
-
-  async requestCameraPermission() {
-    if (Platform.OS !== 'android') return true;
-    const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
-      title: 'KidShield Camera Access',
-      message: 'Parent wants to view camera for safety monitoring',
-      buttonPositive: 'Allow',
-    });
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  }
-
-  async requestAudioPermission() {
-    if (Platform.OS !== 'android') return true;
-    const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, {
-      title: 'KidShield Microphone Access',
-      message: 'Parent wants to monitor ambient audio for safety',
-      buttonPositive: 'Allow',
-    });
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  }
-
-  async requestScreenPermission() {
-    try {
-      const result = await ScreenMirror?.requestPermission?.();
-      return result;
-    } catch (e) {
-      return false;
-    }
+    console.log('ðŸŽ¯ RemoteCommandHandler ready, parentId:', this.parentId);
   }
 
   async handleCommand(commandId, commandData) {
-    const { command, data } = commandData;
+    const { command, data = {} } = commandData;
+
     await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
+
     try {
       switch (command) {
+
+        // â”€â”€ Camera: single snapshot â”€â”€
         case 'TAKE_SNAPSHOT':
-          await this.requestCameraPermission();
-          if (data?.camera === 'front') await RemoteCamera?.takeFrontSnapshot?.(data.requestId);
-          else await RemoteCamera?.takeSnapshot?.(data.requestId);
+          if (!RemoteCamera) throw new Error('Camera module not available');
+          if (data.camera === 'front') {
+            await RemoteCamera.takeFrontSnapshot(data.requestId || `snap_${Date.now()}`);
+          } else {
+            await RemoteCamera.takeSnapshot(data.requestId || `snap_${Date.now()}`);
+          }
           break;
+
+        // â”€â”€ Camera: start live stream â”€â”€
+        case 'START_LIVE_CAMERA':
+          if (!RemoteCamera) throw new Error('Camera module not available');
+          await RemoteCamera.startLiveCamera(data.useFront || false, data.intervalSeconds || 3);
+          break;
+
+        // â”€â”€ Camera: stop live stream â”€â”€
+        case 'STOP_LIVE_CAMERA':
+          if (RemoteCamera) await RemoteCamera.stopLiveCamera();
+          break;
+
+        // â”€â”€ Screen: request permission â”€â”€
+        case 'REQUEST_SCREEN_PERMISSION':
+          if (ScreenMirror) {
+            await ScreenMirror.requestPermission();
+          }
+          break;
+
+        // â”€â”€ Screen: single screenshot â”€â”€
         case 'TAKE_SCREENSHOT':
-          await ScreenMirror?.takeScreenshot?.(data?.requestId || 'snap');
+          if (!ScreenMirror) throw new Error('ScreenMirror module not available');
+          await ScreenMirror.takeScreenshot(data.requestId || `ss_${Date.now()}`);
           break;
+
+        // â”€â”€ Screen: start live view â”€â”€
         case 'START_LIVE_VIEW':
-          await ScreenMirror?.startLiveView?.(data?.intervalSeconds || 3);
+          if (!ScreenMirror) throw new Error('ScreenMirror module not available');
+          await ScreenMirror.startLiveView(data.intervalSeconds || 3);
           break;
+
+        // â”€â”€ Screen: stop live view â”€â”€
         case 'STOP_LIVE_VIEW':
-          await ScreenMirror?.stopLiveView?.();
+          if (ScreenMirror) await ScreenMirror.stopLiveView();
           break;
+
+        // â”€â”€ Audio: start capture â”€â”€
         case 'START_AUDIO_CAPTURE':
-          await this.requestAudioPermission();
-          await AmbientAudio?.startAmbientCapture?.(data?.requestId || 'audio');
+          if (!AmbientAudio) throw new Error('AmbientAudio module not available');
+          await AmbientAudio.startAmbientCapture(data.requestId || `audio_${Date.now()}`);
           break;
+
+        // â”€â”€ Audio: stop capture â”€â”€
         case 'STOP_AUDIO_CAPTURE':
-          await AmbientAudio?.stopAmbientCapture?.();
+          if (AmbientAudio) await AmbientAudio.stopAmbientCapture();
           break;
+
+        // â”€â”€ Audio: mute â”€â”€
+        case 'MUTE_AUDIO':
+          if (AmbientAudio) await AmbientAudio.setMuted(true);
+          break;
+
+        // â”€â”€ Audio: unmute â”€â”€
+        case 'UNMUTE_AUDIO':
+          if (AmbientAudio) await AmbientAudio.setMuted(false);
+          break;
+
+        // â”€â”€ Device control â”€â”€
         case 'LOCK_DEVICE':
-          Alert.alert('Phone Locked', 'Your parent has locked this phone.', [], { cancelable: false });
+          Alert.alert('ðŸ”’ Phone Locked', 'Parent à¤¨à¥‡ phone lock à¤•à¥‡à¤²à¤¾.', [], { cancelable: false });
           break;
+
         case 'BEDTIME_MODE':
-          Alert.alert('Bedtime', 'Time to sleep! Good night!', [], { cancelable: false });
+          Alert.alert('ðŸŒ™ Bedtime', 'à¤à¥‹à¤ªà¤¾à¤¯à¤šà¥€ à¤µà¥‡à¤³ à¤à¤¾à¤²à¥€! Phone à¤ à¥‡à¤µ.', [], { cancelable: false });
           break;
+
+        case 'GET_LOCATION':
+          // ChildHome à¤®à¤§à¥à¤¯à¥‡ location track à¤¹à¥‹à¤¤à¥‹à¤š, Firestore à¤®à¤§à¥à¤¯à¥‡ à¤†à¤¹à¥‡
+          break;
+
         default:
-          break;
+          console.log('Unknown command:', command);
       }
+
       await firestore().collection('commands').doc(commandId).update({
-        status: 'executed', executedAt: firestore.FieldValue.serverTimestamp(),
+        status: 'executed',
+        executedAt: firestore.FieldValue.serverTimestamp(),
       });
+
     } catch (error) {
+      console.error('Command failed:', command, error);
       await firestore().collection('commands').doc(commandId).update({
-        status: 'failed', error: error.message,
+        status: 'failed',
+        error: error.message,
       });
+    }
+  }
+
+  async requestAllPermissions() {
+    // Camera
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    // Microphone
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    // Location
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    // Screen capture - MediaProjection permission (system popup)
+    if (ScreenMirror) {
+      try { await ScreenMirror.requestPermission(); } catch (e) {}
     }
   }
 
   destroy() {
     if (this.unsubscribe) this.unsubscribe();
-    if (this.unsubscribeFamilies) this.unsubscribeFamilies();
-    if (this.cameraInterval) clearInterval(this.cameraInterval);
+    if (RemoteCamera) RemoteCamera.stopLiveCamera();
+    if (AmbientAudio) AmbientAudio.stopAmbientCapture();
+    if (ScreenMirror) ScreenMirror.stopLiveView();
   }
 }
 

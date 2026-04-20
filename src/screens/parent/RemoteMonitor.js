@@ -1,293 +1,355 @@
-// src/screens/parent/RemoteMonitor.js
-// AirDroid-style Remote Monitoring Dashboard
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, ScrollView, Alert, ActivityIndicator,
-  Dimensions,
+  Dimensions, Animated,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import axios from 'axios';
 import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
 
-const API_URL = process.env.API_URL;
+const API_URL = 'https://kidshield-0757.onrender.com';
 const { width } = Dimensions.get('window');
 
 export default function RemoteMonitor({ route }) {
-  const { child } = route.params; // selected child
+  const { child } = route?.params || { child: { id: '', name: 'Child' } };
   const [loading, setLoading] = useState(false);
   const [activeFeature, setActiveFeature] = useState(null);
   const [captures, setCaptures] = useState([]);
-  const [liveScreenshot, setLiveScreenshot] = useState(null);
-  const [audioPlaying, setAudioPlaying] = useState(false);
-  const liveInterval = useRef(null);
+  const [liveFrame, setLiveFrame] = useState(null);
+  const [liveType, setLiveType] = useState(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [childData, setChildData] = useState(null);
+  const audioAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Listen for new captures from child device
-    const unsubscribe = firestore()
+    if (!child?.id) return;
+
+    // Listen to child's liveFrame in Firestore (families collection)
+    const unsubChild = firestore()
+      .collection('families').doc(auth().currentUser?.uid)
+      .collection('children').doc(child.id)
+      .onSnapshot(doc => {
+        if (doc.exists) {
+          const data = doc.data();
+          setChildData(data);
+          if (data.liveFrame) {
+            setLiveFrame(data.liveFrame);
+            setLiveType(data.liveType || 'screen');
+          }
+          if (data.audioLevel !== undefined) {
+            setAudioLevel(data.audioLevel);
+            // Animate audio bar
+            Animated.timing(audioAnim, {
+              toValue: data.audioLevel / 100,
+              duration: 100,
+              useNativeDriver: false,
+            }).start();
+          }
+          if (data.isMuted !== undefined) setIsMuted(data.isMuted);
+        }
+      });
+
+    // Listen for captures history
+    const unsubCaptures = firestore()
       .collection('remoteCaptures')
       .where('childId', '==', child.id)
       .orderBy('timestamp', 'desc')
       .limit(10)
       .onSnapshot(snap => {
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setCaptures(items);
-
-        // Update live screenshot
-        const latest = items.find(i => i.type === 'screenshot');
-        if (latest) setLiveScreenshot(latest.screenshotBase64);
+        setCaptures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
     return () => {
-      unsubscribe();
-      stopLiveView();
+      unsubChild();
+      unsubCaptures();
+      stopAll();
     };
-  }, []);
+  }, [child?.id]);
 
-  // ── Send command to child device ──
   const sendCommand = async (command, data = {}) => {
-    const token = await auth().currentUser.getIdToken();
-    await axios.post(`${API_URL}/api/commands/send`, {
-      childId: child.id,
-      command,
-      data,
-    }, { headers: { Authorization: `Bearer ${token}` } });
-  };
-
-  // ── Remote Camera Snapshot ──
-  const takeSnapshot = async (camera = 'back') => {
-    setLoading(true);
-    setActiveFeature('camera');
     try {
-      const requestId = `snap_${Date.now()}`;
-      await sendCommand('TAKE_SNAPSHOT', { camera, requestId });
-
-      // Wait for child to respond (max 15 sec)
-      let attempts = 0;
-      const checkInterval = setInterval(async () => {
-        attempts++;
-        const snap = await firestore()
-          .collection('remoteCaptures')
-          .where('requestId', '==', requestId)
-          .limit(1)
-          .get();
-
-        if (!snap.empty || attempts > 15) {
-          clearInterval(checkInterval);
-          setLoading(false);
-          if (snap.empty) Alert.alert('Timeout', 'Phone respond नाही केला.');
-        }
-      }, 1000);
+      const token = await auth().currentUser?.getIdToken();
+      await fetch(`${API_URL}/api/command/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ childId: child.id, command, params: data }),
+      });
     } catch (e) {
-      setLoading(false);
-      Alert.alert('Error', e.message);
+      // Fallback: direct Firestore command
+      await firestore().collection('commands').add({
+        childId: child.id,
+        command,
+        data,
+        status: 'pending',
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
     }
   };
 
-  // ── Screen Live View ──
-  const startLiveView = async () => {
+  // â”€â”€ Screen Live View â”€â”€
+  const startScreenLive = async () => {
+    setLoading(true);
     setActiveFeature('screen');
-    await sendCommand('START_LIVE_VIEW', { intervalSeconds: 3 });
-
-    // Auto-refresh UI every 3 seconds
-    liveInterval.current = setInterval(() => {
-      // Firestore listener already updates liveScreenshot
-    }, 3000);
+    await sendCommand('REQUEST_SCREEN_PERMISSION');
+    setTimeout(async () => {
+      await sendCommand('START_LIVE_VIEW', { intervalSeconds: 3 });
+      setLoading(false);
+    }, 2000);
   };
 
-  const stopLiveView = async () => {
-    if (liveInterval.current) clearInterval(liveInterval.current);
+  const stopScreenLive = async () => {
+    await sendCommand('STOP_LIVE_VIEW');
     setActiveFeature(null);
-    try {
-      await sendCommand('STOP_LIVE_VIEW');
-    } catch (e) {}
+    setLiveFrame(null);
   };
 
-  // ── Ambient Audio ──
-  const startAudioCapture = async () => {
+  // â”€â”€ Camera â”€â”€
+  const startCameraLive = async (useFront = false) => {
+    setLoading(true);
+    setActiveFeature(useFront ? 'camera_front' : 'camera_back');
+    await sendCommand('START_LIVE_CAMERA', { useFront, intervalSeconds: 3 });
+    setLoading(false);
+  };
+
+  const stopCamera = async () => {
+    await sendCommand('STOP_LIVE_CAMERA');
+    setActiveFeature(null);
+  };
+
+  const takeSnapshot = async (useFront = false) => {
+    setLoading(true);
+    const requestId = `snap_${Date.now()}`;
+    await sendCommand('TAKE_SNAPSHOT', { camera: useFront ? 'front' : 'back', requestId });
+    setTimeout(() => setLoading(false), 3000);
+  };
+
+  // â”€â”€ Audio â”€â”€
+  const startAudio = async () => {
     setLoading(true);
     setActiveFeature('audio');
     const requestId = `audio_${Date.now()}`;
     await sendCommand('START_AUDIO_CAPTURE', { requestId });
     setLoading(false);
-    Alert.alert(
-      '🎤 Recording',
-      'Child च्या phone वर 30 second audio record होत आहे...',
-      [{ text: 'OK' }]
-    );
   };
+
+  const stopAudio = async () => {
+    await sendCommand('STOP_AUDIO_CAPTURE');
+    setActiveFeature(null);
+  };
+
+  const toggleMute = async () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    await sendCommand(newMuted ? 'MUTE_AUDIO' : 'UNMUTE_AUDIO');
+  };
+
+  const stopAll = async () => {
+    try {
+      await sendCommand('STOP_LIVE_VIEW');
+      await sendCommand('STOP_LIVE_CAMERA');
+      await sendCommand('STOP_AUDIO_CAPTURE');
+    } catch (e) {}
+    setActiveFeature(null);
+  };
+
+  const isLiveCameraActive = activeFeature === 'camera_front' || activeFeature === 'camera_back';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.childInfo}>
-          <Text style={styles.childAvatar}>{child.avatar || '👦'}</Text>
-          <View>
-            <Text style={styles.childName}>{child.name}</Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.dot,
-                { backgroundColor: child.isOnline ? COLORS.green : COLORS.muted }]} />
-              <Text style={styles.statusText}>
-                {child.isOnline ? 'Online' : 'Offline'}
-              </Text>
-            </View>
+        <Text style={styles.childAvatar}>ðŸ‘¦</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.childName}>{child?.name || 'Child'}</Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: childData ? '#00cc88' : '#8899aa' }]} />
+            <Text style={styles.statusText}>{childData ? 'Active' : 'Offline'}</Text>
           </View>
         </View>
-        <Text style={styles.headerTitle}>Remote Monitor</Text>
+        {activeFeature && (
+          <TouchableOpacity style={styles.stopAllBtn} onPress={stopAll}>
+            <Text style={styles.stopAllText}>â¹ Stop All</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Feature Cards */}
-      <Text style={styles.sectionLabel}>📡 Remote Controls</Text>
+      {/* Live Frame Display */}
+      {liveFrame && (
+        <View style={styles.liveContainer}>
+          <View style={styles.liveHeader}>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+            <Text style={styles.liveTypeText}>
+              {liveType === 'screen' ? 'ðŸ“± Screen' :
+               liveType === 'camera_front' ? 'ðŸ¤³ Front Camera' : 'ðŸ“· Back Camera'}
+            </Text>
+          </View>
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${liveFrame}` }}
+            style={styles.liveImage}
+            resizeMode="contain"
+          />
+        </View>
+      )}
 
-      {/* Screen Mirror Card */}
+      {/* â”€â”€ Screen Monitor â”€â”€ */}
       <View style={styles.featureCard}>
         <View style={styles.featureHeader}>
-          <Text style={styles.featureIcon}>📱</Text>
+          <Text style={styles.featureIcon}>ðŸ“±</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.featureTitle}>Screen View</Text>
-            <Text style={styles.featureDesc}>Child च्या screen चे live screenshots</Text>
+            <Text style={styles.featureTitle}>Screen Monitor</Text>
+            <Text style={styles.featureDesc}>Child à¤šà¥à¤¯à¤¾ screen à¤šà¥‡ live view</Text>
           </View>
-          {activeFeature === 'screen' && (
-            <View style={styles.liveBadge}>
-              <Text style={styles.liveBadgeText}>LIVE</Text>
-            </View>
+          {activeFeature === 'screen' && <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>LIVE</Text></View>}
+        </View>
+        <View style={styles.btnRow}>
+          {activeFeature !== 'screen' ? (
+            <TouchableOpacity style={styles.btnPrimary} onPress={startScreenLive} disabled={loading}>
+              {loading && activeFeature !== 'screen' ? <ActivityIndicator color="#000" size="small" /> :
+                <Text style={styles.btnPrimaryText}>â–¶ Start Live</Text>}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.btnDanger} onPress={stopScreenLive}>
+              <Text style={styles.btnDangerText}>â¹ Stop</Text>
+            </TouchableOpacity>
           )}
+          <TouchableOpacity style={styles.btnSecondary}
+            onPress={() => sendCommand('TAKE_SCREENSHOT', { requestId: `ss_${Date.now()}` })}>
+            <Text style={styles.btnSecText}>ðŸ“¸ Snapshot</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* â”€â”€ Remote Camera â”€â”€ */}
+      <View style={styles.featureCard}>
+        <View style={styles.featureHeader}>
+          <Text style={styles.featureIcon}>ðŸ“·</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.featureTitle}>Remote Camera</Text>
+            <Text style={styles.featureDesc}>Front + Back camera live stream</Text>
+          </View>
+          {isLiveCameraActive && <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>LIVE</Text></View>}
         </View>
 
-        {/* Live Screenshot Display */}
-        {liveScreenshot && activeFeature === 'screen' && (
+        {/* Latest capture */}
+        {captures.find(c => c.type === 'camera_snapshot' || c.type === 'camera_front') && (
           <Image
-            source={{ uri: `data:image/jpeg;base64,${liveScreenshot}` }}
-            style={styles.screenPreview}
-            resizeMode="contain"
+            source={{ uri: `data:image/jpeg;base64,${captures.find(c => c.imageBase64)?.imageBase64}` }}
+            style={styles.capturePreview}
+            resizeMode="cover"
           />
         )}
 
-        <View style={styles.featureBtns}>
-          {activeFeature !== 'screen' ? (
-            <TouchableOpacity style={styles.btnPrimary} onPress={startLiveView}>
-              <Text style={styles.btnText}>▶ Live View Start</Text>
-            </TouchableOpacity>
+        <View style={styles.btnRow}>
+          {!isLiveCameraActive ? (
+            <>
+              <TouchableOpacity style={styles.btnPrimary} onPress={() => startCameraLive(false)} disabled={loading}>
+                <Text style={styles.btnPrimaryText}>ðŸ“· Back Live</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSecondary} onPress={() => startCameraLive(true)} disabled={loading}>
+                <Text style={styles.btnSecText}>ðŸ¤³ Front Live</Text>
+              </TouchableOpacity>
+            </>
           ) : (
-            <TouchableOpacity style={styles.btnDanger} onPress={stopLiveView}>
-              <Text style={[styles.btnText, { color: COLORS.red }]}>⏹ Stop</Text>
+            <TouchableOpacity style={styles.btnDanger} onPress={stopCamera}>
+              <Text style={styles.btnDangerText}>â¹ Stop Camera</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={styles.btnSecondary}
-            onPress={async () => {
-              const reqId = `ss_${Date.now()}`;
-              await sendCommand('TAKE_SCREENSHOT', { requestId: reqId });
-            }}>
-            <Text style={styles.btnSecText}>📸 Snapshot</Text>
+        </View>
+        <View style={[styles.btnRow, { marginTop: 8 }]}>
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => takeSnapshot(false)} disabled={loading}>
+            <Text style={styles.btnSecText}>ðŸ“· Back Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => takeSnapshot(true)} disabled={loading}>
+            <Text style={styles.btnSecText}>ðŸ¤³ Front Photo</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Camera Card */}
+      {/* â”€â”€ Ambient Audio â”€â”€ */}
       <View style={styles.featureCard}>
         <View style={styles.featureHeader}>
-          <Text style={styles.featureIcon}>📷</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.featureTitle}>Remote Camera</Text>
-            <Text style={styles.featureDesc}>Phone च्या camera ने photo काढा</Text>
-          </View>
-          {loading && activeFeature === 'camera' && (
-            <ActivityIndicator color={COLORS.accent} />
-          )}
-        </View>
-
-        {/* Latest camera capture */}
-        {captures.filter(c => c.type === 'camera_snapshot').slice(0, 1).map(cap => (
-          <Image
-            key={cap.id}
-            source={{ uri: `data:image/jpeg;base64,${cap.imageBase64}` }}
-            style={styles.cameraPreview}
-            resizeMode="cover"
-          />
-        ))}
-
-        <View style={styles.featureBtns}>
-          <TouchableOpacity
-            style={styles.btnPrimary}
-            onPress={() => takeSnapshot('back')}
-            disabled={loading}>
-            <Text style={styles.btnText}>📷 Back Camera</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.btnSecondary}
-            onPress={() => takeSnapshot('front')}
-            disabled={loading}>
-            <Text style={styles.btnSecText}>🤳 Front Camera</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Audio Card */}
-      <View style={styles.featureCard}>
-        <View style={styles.featureHeader}>
-          <Text style={styles.featureIcon}>🎤</Text>
+          <Text style={styles.featureIcon}>ðŸŽ¤</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.featureTitle}>Ambient Audio</Text>
-            <Text style={styles.featureDesc}>30 second आजूबाजूचा आवाज ऐका</Text>
+            <Text style={styles.featureDesc}>Surroundings à¤à¤•à¤¾ + mute/unmute</Text>
           </View>
-          {activeFeature === 'audio' && loading && (
-            <ActivityIndicator color={COLORS.accent} />
+          {activeFeature === 'audio' && <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>REC</Text></View>}
+        </View>
+
+        {/* Audio Level Meter */}
+        {activeFeature === 'audio' && (
+          <View style={styles.audioMeter}>
+            <Text style={styles.audioMeterLabel}>
+              {isMuted ? 'ðŸ”‡ Muted' : `ðŸ”Š Level: ${audioLevel}%`}
+            </Text>
+            <View style={styles.audioBar}>
+              <Animated.View style={[
+                styles.audioFill,
+                {
+                  width: audioAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                  backgroundColor: audioLevel > 70 ? '#ff4444' : audioLevel > 40 ? '#ff9900' : '#00cc88',
+                }
+              ]} />
+            </View>
+          </View>
+        )}
+
+        <View style={styles.btnRow}>
+          {activeFeature !== 'audio' ? (
+            <TouchableOpacity style={styles.btnPrimary} onPress={startAudio}>
+              <Text style={styles.btnPrimaryText}>ðŸŽ¤ Start Audio</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity style={styles.btnDanger} onPress={stopAudio}>
+                <Text style={styles.btnDangerText}>â¹ Stop</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnSecondary, isMuted && { borderColor: '#ff9900' }]}
+                onPress={toggleMute}>
+                <Text style={styles.btnSecText}>{isMuted ? 'ðŸ”Š Unmute' : 'ðŸ”‡ Mute'}</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
-        {/* Audio captures list */}
+        {/* Audio history */}
         {captures.filter(c => c.type === 'ambient_audio').slice(0, 3).map(cap => (
-          <TouchableOpacity
-            key={cap.id}
-            style={styles.audioItem}
-            onPress={() => {
-              // Play audio (base64 WAV)
-              Alert.alert('🎵 Audio', `Recorded: ${cap.timestamp}`);
-              // Implement audio playback with react-native-sound
-            }}>
-            <Text style={{ fontSize: 20, marginRight: 10 }}>🔊</Text>
-            <View>
-              <Text style={styles.audioTime}>{cap.timestamp}</Text>
-              <Text style={styles.audioDuration}>{cap.duration} seconds</Text>
+          <View key={cap.id} style={styles.audioItem}>
+            <Text style={{ fontSize: 20, marginRight: 10 }}>ðŸ”Š</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.audioTime}>{cap.timestamp?.substring(0, 19) || 'Recording'}</Text>
+              <Text style={styles.audioDuration}>{cap.duration}s recording</Text>
             </View>
-            <Text style={styles.playBtn}>▶</Text>
-          </TouchableOpacity>
+          </View>
         ))}
-
-        <TouchableOpacity
-          style={styles.btnPrimary}
-          onPress={startAudioCapture}
-          disabled={loading && activeFeature === 'audio'}>
-          <Text style={styles.btnText}>🎤 30s Audio Capture</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Recent Captures */}
-      {captures.length > 0 && (
+      {/* Captures Gallery */}
+      {captures.filter(c => c.imageBase64 || c.screenshotBase64).length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>🗂️ Recent Captures</Text>
+          <Text style={styles.sectionLabel}>ðŸ—‚ï¸ Recent Captures</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {captures.filter(c => c.type !== 'ambient_audio').map(cap => (
-              <View key={cap.id} style={styles.thumbnailCard}>
-                {cap.imageBase64 || cap.screenshotBase64 ? (
-                  <Image
-                    source={{
-                      uri: `data:image/jpeg;base64,${cap.imageBase64 || cap.screenshotBase64}`
-                    }}
-                    style={styles.thumbnail}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <View style={styles.thumbnailBadge}>
-                  <Text style={styles.thumbnailType}>
-                    {cap.type === 'screenshot' ? '📱' : '📷'}
-                  </Text>
-                </View>
+            {captures.filter(c => c.imageBase64 || c.screenshotBase64).map(cap => (
+              <View key={cap.id} style={styles.thumbCard}>
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${cap.imageBase64 || cap.screenshotBase64}` }}
+                  style={styles.thumb}
+                  resizeMode="cover"
+                />
+                <Text style={styles.thumbLabel}>
+                  {cap.type === 'camera_front' ? 'ðŸ¤³' :
+                   cap.type === 'camera_snapshot' ? 'ðŸ“·' : 'ðŸ“±'}
+                </Text>
               </View>
             ))}
           </ScrollView>
@@ -299,90 +361,47 @@ export default function RemoteMonitor({ route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg, paddingTop: 60, paddingBottom: 100 },
-
-  header: { marginBottom: SPACING.xl },
-  childInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  container: { flex: 1, backgroundColor: '#060b14' },
+  content: { padding: 16, paddingTop: 60, paddingBottom: 100 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
   childAvatar: { fontSize: 36 },
-  childName: { fontSize: 18, fontFamily: FONTS.bold, color: COLORS.text },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  childName: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 12, color: COLORS.muted },
-  headerTitle: { fontSize: 24, fontFamily: FONTS.displayBlack, color: COLORS.text, letterSpacing: -0.5 },
-
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 2,
-    textTransform: 'uppercase', color: COLORS.accent,
-    marginBottom: SPACING.md, marginTop: SPACING.sm,
-  },
-
-  featureCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    borderWidth: 1, borderColor: COLORS.border,
-    marginBottom: SPACING.md,
-  },
-  featureHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: SPACING.md },
+  statusText: { fontSize: 12, color: '#8899aa' },
+  stopAllBtn: { backgroundColor: '#ff4444', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  stopAllText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  liveContainer: { backgroundColor: '#0a0a1a', borderRadius: 16, overflow: 'hidden', marginBottom: 16, borderWidth: 2, borderColor: '#ff4444' },
+  liveHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, backgroundColor: 'rgba(255,68,68,0.1)' },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#ff4444', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
+  liveText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  liveTypeText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  liveImage: { width: '100%', height: 220, backgroundColor: '#000' },
+  featureCard: { backgroundColor: '#111d35', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#1e2d4a' },
+  featureHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   featureIcon: { fontSize: 28 },
-  featureTitle: { fontSize: 16, fontFamily: FONTS.bold, color: COLORS.text },
-  featureDesc: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-
-  liveBadge: {
-    backgroundColor: COLORS.red,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  liveBadgeText: { fontSize: 10, fontFamily: FONTS.bold, color: COLORS.white },
-
-  screenPreview: {
-    width: '100%', height: 200,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surface,
-    marginBottom: SPACING.md,
-  },
-  cameraPreview: {
-    width: '100%', height: 220,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surface,
-    marginBottom: SPACING.md,
-  },
-
-  featureBtns: { flexDirection: 'row', gap: 10 },
-  btnPrimary: {
-    flex: 1, backgroundColor: COLORS.accent,
-    borderRadius: RADIUS.md, padding: 12, alignItems: 'center',
-  },
-  btnDanger: {
-    flex: 1, backgroundColor: 'rgba(255,95,95,0.1)',
-    borderRadius: RADIUS.md, padding: 12, alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,95,95,0.3)',
-  },
-  btnSecondary: {
-    flex: 1, backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md, padding: 12, alignItems: 'center',
-    borderWidth: 1, borderColor: COLORS.border,
-  },
-  btnText: { fontSize: 13, fontFamily: FONTS.bold, color: COLORS.bg },
-  btnSecText: { fontSize: 13, fontFamily: FONTS.bold, color: COLORS.text },
-
-  audioItem: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md, padding: SPACING.md,
-    marginBottom: 8,
-  },
-  audioTime: { fontSize: 13, fontFamily: FONTS.medium, color: COLORS.text },
-  audioDuration: { fontSize: 11, color: COLORS.muted },
-  playBtn: { marginLeft: 'auto', color: COLORS.accent, fontSize: 20 },
-
-  thumbnailCard: { position: 'relative', marginRight: 10 },
-  thumbnail: { width: 100, height: 160, borderRadius: RADIUS.md },
-  thumbnailBadge: {
-    position: 'absolute', top: 6, right: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: RADIUS.full, padding: 4,
-  },
-  thumbnailType: { fontSize: 12 },
+  featureTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  featureDesc: { fontSize: 12, color: '#8899aa', marginTop: 2 },
+  activeBadge: { backgroundColor: '#ff4444', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  activeBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  capturePreview: { width: '100%', height: 180, borderRadius: 10, backgroundColor: '#000', marginBottom: 12 },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  btnPrimary: { flex: 1, backgroundColor: '#00d4ff', borderRadius: 10, padding: 12, alignItems: 'center' },
+  btnPrimaryText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  btnDanger: { flex: 1, backgroundColor: 'rgba(255,68,68,0.15)', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,68,68,0.4)' },
+  btnDangerText: { color: '#ff4444', fontWeight: '700', fontSize: 13 },
+  btnSecondary: { flex: 1, backgroundColor: '#0d1826', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1e2d4a' },
+  btnSecText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  audioMeter: { backgroundColor: '#060b14', borderRadius: 10, padding: 12, marginBottom: 12 },
+  audioMeterLabel: { color: '#fff', fontWeight: '600', marginBottom: 8 },
+  audioBar: { height: 10, backgroundColor: '#1e2d4a', borderRadius: 5 },
+  audioFill: { height: 10, borderRadius: 5 },
+  audioItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1826', borderRadius: 10, padding: 10, marginTop: 8 },
+  audioTime: { fontSize: 12, color: '#fff', fontWeight: '500' },
+  audioDuration: { fontSize: 11, color: '#8899aa' },
+  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: '#00d4ff', marginBottom: 12, marginTop: 4 },
+  thumbCard: { marginRight: 10, position: 'relative' },
+  thumb: { width: 90, height: 140, borderRadius: 10 },
+  thumbLabel: { position: 'absolute', top: 4, right: 4, fontSize: 14 },
 });

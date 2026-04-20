@@ -20,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,29 +36,25 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     private Promise pendingPermissionPromise;
     private boolean isMirroring = false;
     private int screenWidth, screenHeight, screenDensity;
-    private String childId, parentId, childDocId;
+    private Runnable liveViewRunnable;
+    private FirebaseFirestore db;
+    private String childId;
+    private String parentId;
 
     public ScreenMirrorModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
         context.addActivityEventListener(this);
+        this.db = FirebaseFirestore.getInstance();
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
         wm.getDefaultDisplay().getMetrics(metrics);
-        screenWidth = metrics.widthPixels;
-        screenHeight = metrics.heightPixels;
+        screenWidth = metrics.widthPixels / 2;
+        screenHeight = metrics.heightPixels / 2;
         screenDensity = metrics.densityDpi;
     }
 
     @Override public String getName() { return "ScreenMirror"; }
-
-    @ReactMethod
-    public void setChildInfo(String cId, String pId, String docId, Promise promise) {
-        this.childId = cId;
-        this.parentId = pId;
-        this.childDocId = docId;
-        promise.resolve(true);
-    }
 
     @ReactMethod
     public void requestPermission(Promise promise) {
@@ -69,111 +66,175 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     }
 
     @ReactMethod
-    public void takeScreenshot(String requestId, Promise promise) {
-        captureAndUpload(promise);
-    }
-
-    @ReactMethod
-    public void startLiveView(int intervalSeconds, Promise promise) {
-        if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Call requestPermission first"); return; }
-        isMirroring = true;
-        startLiveLoop(intervalSeconds > 0 ? intervalSeconds : 3);
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        this.childId = cId;
+        this.parentId = pId;
         promise.resolve(true);
     }
 
+    // â”€â”€ Take single screenshot â”€â”€
+    @ReactMethod
+    public void takeScreenshot(String requestId, Promise promise) {
+        if (mediaProjection == null) { promise.reject("NO_PERMISSION", "No media projection permission"); return; }
+        captureAndUpload(requestId, promise);
+    }
+
+    // â”€â”€ Start continuous live view â”€â”€
+    @ReactMethod
+    public void startLiveView(int intervalSeconds, Promise promise) {
+        if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Need screen capture permission"); return; }
+        if (isMirroring) { promise.resolve(true); return; }
+
+        isMirroring = true;
+        startBackgroundThread();
+        setupVirtualDisplay();
+
+        int intervalMs = intervalSeconds * 1000;
+        liveViewRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isMirroring) return;
+                captureFrameToFirestore();
+                handler.postDelayed(this, intervalMs);
+            }
+        };
+        handler.postDelayed(liveViewRunnable, 500);
+        promise.resolve(true);
+    }
+
+    // â”€â”€ Stop live view â”€â”€
     @ReactMethod
     public void stopLiveView(Promise promise) {
         isMirroring = false;
-        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
-        if (handlerThread != null) { handlerThread.quitSafely(); handlerThread = null; }
+        if (liveViewRunnable != null && handler != null) {
+            handler.removeCallbacks(liveViewRunnable);
+        }
+        releaseResources();
         promise.resolve(true);
     }
 
-    private void startLiveLoop(int intervalSeconds) {
-        handlerThread = new HandlerThread("ScreenLiveThread");
+    private void startBackgroundThread() {
+        handlerThread = new HandlerThread("ScreenCaptureThread");
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper());
-        Runnable captureRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isMirroring) {
-                    captureAndUpload(null);
-                    handler.postDelayed(this, intervalSeconds * 1000L);
-                }
-            }
-        };
-        handler.post(captureRunnable);
     }
 
-    private void captureAndUpload(Promise promise) {
+    private void setupVirtualDisplay() {
+        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} }
+        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2);
+        virtualDisplay = mediaProjection.createVirtualDisplay(
+            "KidShieldLive", screenWidth, screenHeight, screenDensity,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader.getSurface(), null, handler
+        );
+    }
+
+    private void captureFrameToFirestore() {
+        if (imageReader == null || childId == null) return;
         try {
-            if (mediaProjection == null) return;
-            if (handlerThread == null || !handlerThread.isAlive()) {
-                handlerThread = new HandlerThread("ScreenCaptureThread");
-                handlerThread.start();
-                handler = new Handler(handlerThread.getLooper());
+            Image image = imageReader.acquireLatestImage();
+            if (image == null) return;
+
+            Image.Plane[] planes = image.getPlanes();
+            ByteBuffer buffer = planes[0].getBuffer();
+            int rowStride = planes[0].getRowStride();
+            int pixelStride = planes[0].getPixelStride();
+            int w = rowStride / pixelStride;
+            Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
+            bmp.copyPixelsFromBuffer(buffer);
+            image.close();
+
+            // Crop to actual screen size
+            if (w > screenWidth) bmp = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bmp.compress(Bitmap.CompressFormat.JPEG, 40, baos); // Low quality = faster
+            String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+            // Save to Firestore - liveFrame field for real-time display
+            Map<String, Object> data = new HashMap<>();
+            data.put("liveFrame", base64);
+            data.put("liveFrameAt", new Date().getTime());
+            data.put("liveType", "screen");
+
+            if (parentId != null && !parentId.isEmpty()) {
+                // families/{parentId}/children/{childId} path
+                db.collection("families").document(parentId)
+                    .collection("children").document(childId)
+                    .update(data);
             }
-            int w = screenWidth / 2, h = screenHeight / 2;
-            ImageReader reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2);
-            VirtualDisplay vd = mediaProjection.createVirtualDisplay("KidShieldCapture", w, h, screenDensity,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, handler);
-            handler.postDelayed(() -> {
-                try {
-                    Image image = reader.acquireLatestImage();
-                    if (image != null) {
-                        Image.Plane[] planes = image.getPlanes();
-                        ByteBuffer buffer = planes[0].getBuffer();
-                        int rowStride = planes[0].getRowStride();
-                        int pixelStride = planes[0].getPixelStride();
-                        Bitmap bitmap = Bitmap.createBitmap(rowStride / pixelStride, h, Bitmap.Config.ARGB_8888);
-                        bitmap.copyPixelsFromBuffer(buffer);
-                        image.close();
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 50, baos);
-                        String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
-                        uploadFrame("data:image/jpeg;base64," + base64);
-                        if (promise != null) promise.resolve(true);
-                    }
-                    vd.release();
-                    reader.close();
-                } catch (Exception e) {
-                    if (promise != null) promise.reject("ERROR", e.getMessage());
-                }
-            }, 400);
+            // Also save to remoteCaptures for history
+            Map<String, Object> capture = new HashMap<>();
+            capture.put("childId", childId);
+            capture.put("screenshotBase64", base64);
+            capture.put("type", "screenshot");
+            capture.put("timestamp", new Date().toString());
+            db.collection("remoteCaptures").add(capture);
+
         } catch (Exception e) {
-            if (promise != null) promise.reject("ERROR", e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    private void uploadFrame(String base64Frame) {
-        try {
-            if (childId == null) childId = FirebaseAuth.getInstance().getCurrentUser() != null ?
-                FirebaseAuth.getInstance().getCurrentUser().getUid() : null;
-            if (childId == null) return;
-            FirebaseFirestore db = FirebaseFirestore.getInstance();
-            Map<String, Object> data = new HashMap<>();
-            data.put("liveFrame", base64Frame);
-            data.put("liveFrameType", "screen");
-            data.put("liveFrameAt", com.google.firebase.Timestamp.now());
-            if (parentId != null && childDocId != null) {
-                db.collection("families").document(parentId)
-                    .collection("children").document(childDocId)
-                    .update(data);
+    private void captureAndUpload(String requestId, Promise promise) {
+        startBackgroundThread();
+        setupVirtualDisplay();
+        handler.postDelayed(() -> {
+            try {
+                Image image = imageReader.acquireLatestImage();
+                if (image != null) {
+                    Image.Plane[] planes = image.getPlanes();
+                    ByteBuffer buffer = planes[0].getBuffer();
+                    int rowStride = planes[0].getRowStride();
+                    int pixelStride = planes[0].getPixelStride();
+                    int w = rowStride / pixelStride;
+                    Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
+                    bmp.copyPixelsFromBuffer(buffer);
+                    image.close();
+
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 60, baos);
+                    String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("childId", childId);
+                    data.put("screenshotBase64", base64);
+                    data.put("requestId", requestId);
+                    data.put("type", "screenshot");
+                    data.put("timestamp", new Date().toString());
+                    db.collection("remoteCaptures").add(data)
+                        .addOnSuccessListener(ref -> promise.resolve(ref.getId()))
+                        .addOnFailureListener(e -> promise.reject("UPLOAD_ERROR", e.getMessage()));
+                    releaseResources();
+                } else {
+                    promise.reject("NO_IMAGE", "Could not capture screen");
+                }
+            } catch (Exception e) {
+                promise.reject("ERROR", e.getMessage());
             }
-            db.collection("remoteCaptures").document(childId)
-                .set(data);
-        } catch (Exception e) { e.printStackTrace(); }
+        }, 500);
+    }
+
+    private void releaseResources() {
+        if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
+        if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} imageReader = null; }
+        if (handlerThread != null) { handlerThread.quitSafely(); handlerThread = null; }
     }
 
     @Override
     public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK && data != null) {
-                projectionManager = (MediaProjectionManager) reactContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
                 mediaProjection = projectionManager.getMediaProjection(resultCode, data);
-                if (pendingPermissionPromise != null) { pendingPermissionPromise.resolve(true); pendingPermissionPromise = null; }
+                if (pendingPermissionPromise != null) {
+                    pendingPermissionPromise.resolve(true);
+                    pendingPermissionPromise = null;
+                }
             } else {
-                if (pendingPermissionPromise != null) { pendingPermissionPromise.reject("DENIED", "Screen capture denied"); pendingPermissionPromise = null; }
+                if (pendingPermissionPromise != null) {
+                    pendingPermissionPromise.reject("DENIED", "Screen capture permission denied");
+                    pendingPermissionPromise = null;
+                }
             }
         }
     }

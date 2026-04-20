@@ -15,6 +15,7 @@ import Reports from './src/screens/parent/Reports';
 import Settings from './src/screens/parent/Settings';
 import MultiChildDashboard from './src/screens/parent/MultiChildDashboard';
 import WeeklyReport from './src/screens/parent/WeeklyReport';
+import RemoteMonitor from './src/screens/parent/RemoteMonitor';
 import ChildHome from './src/screens/child/ChildHome';
 import { ErrorBoundary } from './src/services/ErrorHandler';
 
@@ -99,6 +100,7 @@ export default function App() {
             <>
               <Stack.Screen name="ParentApp" component={ParentTabs} />
               <Stack.Screen name="WeeklyReport" component={WeeklyReport} />
+              <Stack.Screen name="RemoteMonitor" component={RemoteMonitor} />
               <Stack.Screen name="Pairing" component={PairingScreen} />
             </>
           ) : (
