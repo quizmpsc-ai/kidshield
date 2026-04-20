@@ -31,7 +31,7 @@ export default function ChildHome({ navigation }) {
     startScreenTimeTracking();
   }, []);
 
-  // ── Child data load करा ──
+  // â”€â”€ Child data load à¤•à¤°à¤¾ â”€â”€
   const loadChildData = async () => {
     try {
       const uid = auth().currentUser?.uid;
@@ -39,9 +39,16 @@ export default function ChildHome({ navigation }) {
       const doc = await firestore().collection('users').doc(uid).get();
       if (doc.exists) {
         const data = doc.data();
-        setChildName(data.name || 'Child');
+                setChildName(data.name || 'Child');
         setParentId(data.parentId || null);
-        setChildDocId(data.childId || null);
+        let correctId = data.childId;
+        if (data.parentId) {
+            try {
+                const snap = await firestore().collection('families').doc(data.parentId).collection('children').limit(1).get();
+                if (!snap.empty) correctId = snap.docs[0].id;
+            } catch(e){}
+        }
+        setChildDocId(correctId || null);
         setLimit(data.screenTimeLimit || 120);
         screenTimeRef.current = data.screenTime || 0;
         setScreenTime(data.screenTime || 0);
@@ -55,7 +62,7 @@ export default function ChildHome({ navigation }) {
     } catch (e) { console.error('Load error:', e); }
   };
 
-  // ── Battery tracking ──
+  // â”€â”€ Battery tracking â”€â”€
   const startBatteryTracking = async () => {
     const updateBattery = async () => {
       try {
@@ -71,36 +78,36 @@ export default function ChildHome({ navigation }) {
     // Immediately fetch
     const level = await updateBattery();
 
-    // हर 5 minutes update करा
+    // à¤¹à¤° 5 minutes update à¤•à¤°à¤¾
     setInterval(updateBattery, 5 * 60 * 1000);
     return level;
   };
 
-  // ── Screen time tracking ──
+  // â”€â”€ Screen time tracking â”€â”€
   const startScreenTimeTracking = () => {
     const interval = setInterval(async () => {
       screenTimeRef.current += 1;
       setScreenTime(screenTimeRef.current);
 
-      // हर 5 minutes Firebase ला push करा
+      // à¤¹à¤° 5 minutes Firebase à¤²à¤¾ push à¤•à¤°à¤¾
       if (screenTimeRef.current % 5 === 0) {
         await pushDataToFirebase();
       }
     }, 60000); // 1 minute
 
-    // पहिल्यांदा 30 seconds नंतर push करा
+    // à¤ªà¤¹à¤¿à¤²à¥à¤¯à¤¾à¤‚à¤¦à¤¾ 30 seconds à¤¨à¤‚à¤¤à¤° push à¤•à¤°à¤¾
     setTimeout(() => pushDataToFirebase(), 30000);
 
     return () => clearInterval(interval);
   };
 
-  // ── सगळा data Firebase families collection मध्ये push करा ──
+  // â”€â”€ à¤¸à¤—à¤³à¤¾ data Firebase families collection à¤®à¤§à¥à¤¯à¥‡ push à¤•à¤°à¤¾ â”€â”€
   const pushDataToFirebase = async () => {
     try {
       const uid = auth().currentUser?.uid;
       if (!uid || !parentId) return;
 
-      // Battery get करा
+      // Battery get à¤•à¤°à¤¾
       let batteryLevel = battery;
       if (BatteryModule && batteryLevel === null) {
         batteryLevel = await BatteryModule.getBatteryLevel();
@@ -125,7 +132,7 @@ export default function ChildHome({ navigation }) {
         screenTime: screenTimeRef.current,
         screenTimeMinutes: screenTimeRef.current,
 
-        // Battery — real device data
+        // Battery â€” real device data
         battery: batteryLevel !== null ? batteryLevel : null,
         batteryLevel: batteryLevel !== null ? batteryLevel : null,
 
@@ -142,17 +149,17 @@ export default function ChildHome({ navigation }) {
         topApps: usageApps.slice(0, 5),
       };
 
-      // 1. families/{parentId}/children/{childDocId} update करा (Web Admin साठी)
+      // 1. families/{parentId}/children/{childDocId} update à¤•à¤°à¤¾ (Web Admin à¤¸à¤¾à¤ à¥€)
       if (childDocId) {
         await firestore()
           .collection('families')
           .doc(parentId)
           .collection('children')
           .doc(childDocId)
-          .update(updateData);
+          .set(updateData, { merge: true });
       }
 
-      // 2. users/{uid} पण update करा (Android app साठी)
+      // 2. users/{uid} à¤ªà¤£ update à¤•à¤°à¤¾ (Android app à¤¸à¤¾à¤ à¥€)
       await firestore().collection('users').doc(uid).update({
         screenTime: screenTimeRef.current,
         battery: batteryLevel,
@@ -167,7 +174,7 @@ export default function ChildHome({ navigation }) {
     }
   };
 
-  // ── Location tracking ──
+  // â”€â”€ Location tracking â”€â”€
   const startLocationTracking = () => {
     Geolocation.requestAuthorization();
     Geolocation.watchPosition(
@@ -223,7 +230,7 @@ export default function ChildHome({ navigation }) {
         await firestore()
           .collection('families').doc(parentId)
           .collection('children').doc(childDocId)
-          .update(locationData);
+          .set(locationData, { merge: true });
       }
 
       // 2. locations collection (separate real-time tracking)
@@ -236,7 +243,7 @@ export default function ChildHome({ navigation }) {
     } catch (e) { console.error('Location error:', e); }
   };
 
-  // ── SOS ──
+  // â”€â”€ SOS â”€â”€
   const handleSOSPress = () => {
     Vibration.vibrate([0, 200, 100, 200]);
     Animated.sequence([
@@ -254,12 +261,12 @@ export default function ChildHome({ navigation }) {
       setSosActive(true);
       const uid = auth().currentUser?.uid;
 
-      // Location पण include करा
+      // Location à¤ªà¤£ include à¤•à¤°à¤¾
       if (location) {
         await sendLocationToFirebase(location.latitude, location.longitude, location.accuracy);
       }
 
-      // Alert firestore मध्ये
+      // Alert firestore à¤®à¤§à¥à¤¯à¥‡
       await firestore().collection('alerts').add({
         childId: uid,
         childName,
@@ -275,7 +282,7 @@ export default function ChildHome({ navigation }) {
         location: location ? { lat: location.latitude, lng: location.longitude } : null,
       });
 
-      // families मध्ये recent activity add करा
+      // families à¤®à¤§à¥à¤¯à¥‡ recent activity add à¤•à¤°à¤¾
       if (childDocId && parentId) {
         await firestore()
           .collection('families').doc(parentId)
@@ -287,7 +294,7 @@ export default function ChildHome({ navigation }) {
           });
       }
 
-      // Backend notify करा
+      // Backend notify à¤•à¤°à¤¾
       try {
         await fetch(`${API_URL}/api/notify`, {
           method: 'POST',
@@ -322,12 +329,12 @@ export default function ChildHome({ navigation }) {
         {!parentId && (
           <TouchableOpacity style={styles.linkBanner}
             onPress={() => navigation.navigate('Pairing')}>
-            <Text style={styles.linkBannerIcon}>🔗</Text>
+            <Text style={styles.linkBannerIcon}>ðŸ”—</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.linkBannerTitle}>Link to Parent</Text>
               <Text style={styles.linkBannerText}>Tap to enter pairing code</Text>
             </View>
-            <Text style={{ color: '#00d4ff', fontSize: 20 }}>→</Text>
+            <Text style={{ color: '#00d4ff', fontSize: 20 }}>â†’</Text>
           </TouchableOpacity>
         )}
 
@@ -354,22 +361,22 @@ export default function ChildHome({ navigation }) {
           <Text style={styles.cardLabel}>Status</Text>
           <View style={styles.statusRow}>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>🔋</Text>
+              <Text style={styles.statusIcon}>ðŸ”‹</Text>
               <Text style={styles.statusText}>{battery !== null ? `${battery}%` : '...'}</Text>
               <Text style={styles.statusLabel}>Battery</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>📍</Text>
+              <Text style={styles.statusIcon}>ðŸ“</Text>
               <Text style={styles.statusText}>{location ? 'Active' : 'Pending'}</Text>
               <Text style={styles.statusLabel}>Location</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{adminEnabled ? '🔒' : '🛡️'}</Text>
+              <Text style={styles.statusIcon}>{adminEnabled ? 'ðŸ”’' : 'ðŸ›¡ï¸'}</Text>
               <Text style={styles.statusText}>{adminEnabled ? 'Protected' : 'Basic'}</Text>
               <Text style={styles.statusLabel}>Security</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{parentId ? '✅' : '❌'}</Text>
+              <Text style={styles.statusIcon}>{parentId ? 'âœ…' : 'âŒ'}</Text>
               <Text style={styles.statusText}>{parentId ? 'Linked' : 'Not Linked'}</Text>
               <Text style={styles.statusLabel}>Parent</Text>
             </View>
@@ -383,7 +390,7 @@ export default function ChildHome({ navigation }) {
             <TouchableOpacity
               style={[styles.sosBtn, sosActive && { opacity: 0.6 }]}
               onPress={handleSOSPress} disabled={sosActive} activeOpacity={0.8}>
-              <Text style={styles.sosIcon}>🆘</Text>
+              <Text style={styles.sosIcon}>ðŸ†˜</Text>
               <Text style={styles.sosBtnText}>SOS</Text>
               <Text style={styles.sosSubText}>Press to alert parent</Text>
             </TouchableOpacity>
@@ -391,11 +398,11 @@ export default function ChildHome({ navigation }) {
         </View>
 
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>ℹ️ KidShield Active</Text>
-          <Text style={styles.infoText}>• Location shared with parent</Text>
-          <Text style={styles.infoText}>• Screen time: {screenTime} minutes today</Text>
-          <Text style={styles.infoText}>• Battery: {battery !== null ? `${battery}%` : 'reading...'}</Text>
-          <Text style={styles.infoText}>• To open hidden app: dial *#1234#</Text>
+          <Text style={styles.infoTitle}>â„¹ï¸ KidShield Active</Text>
+          <Text style={styles.infoText}>â€¢ Location shared with parent</Text>
+          <Text style={styles.infoText}>â€¢ Screen time: {screenTime} minutes today</Text>
+          <Text style={styles.infoText}>â€¢ Battery: {battery !== null ? `${battery}%` : 'reading...'}</Text>
+          <Text style={styles.infoText}>â€¢ To open hidden app: dial *#1234#</Text>
         </View>
       </ScrollView>
     </View>

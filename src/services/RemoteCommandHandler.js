@@ -1,11 +1,11 @@
-// src/services/RemoteCommandHandler.js â€” FIXED VERSION
+// src/services/RemoteCommandHandler.js Ã¢â‚¬â€ FIXED VERSION
 //
 // BUGS FIXED:
-// 1. childId field: data.childId â†’ user.uid (Firestore doc à¤®à¤§à¥à¤¯à¥‡ childId field à¤¨à¤¸à¤¤à¥‹)
+// 1. childId field: data.childId Ã¢â€ â€™ user.uid (Firestore doc Ã Â¤Â®Ã Â¤Â§Ã Â¥ÂÃ Â¤Â¯Ã Â¥â€¡ childId field Ã Â¤Â¨Ã Â¤Â¸Ã Â¤Â¤Ã Â¥â€¹)
 // 2. Socket reconnection logic added
-// 3. NativeEventEmitter â€” module specify à¤•à¥‡à¤²à¤¾ (warning fix)
+// 3. NativeEventEmitter Ã¢â‚¬â€ module specify Ã Â¤â€¢Ã Â¥â€¡Ã Â¤Â²Ã Â¤Â¾ (warning fix)
 // 4. LOCK_DEVICE garbled string fixed
-// 5. ScreenMirror requestPermission â€” UI thread à¤µà¤° run à¤•à¤°à¤£à¥‡ à¤—à¤°à¤œà¥‡à¤šà¥‡
+// 5. ScreenMirror requestPermission Ã¢â‚¬â€ UI thread Ã Â¤ÂµÃ Â¤Â° run Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â£Ã Â¥â€¡ Ã Â¤â€”Ã Â¤Â°Ã Â¤Å“Ã Â¥â€¡Ã Â¤Å¡Ã Â¥â€¡
 
 import { NativeModules, NativeEventEmitter } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
@@ -38,39 +38,50 @@ class RemoteCommandHandler {
 
       const data = doc.data();
 
-      // â”€â”€ BUG FIX #5: childId correctly set â”€â”€
-      // Problem: data.childId (Firestore field) à¤¨à¥‡à¤¹à¤®à¥€ à¤…à¤¸à¤¤ à¤¨à¤¾à¤¹à¥€
-      // Fix: user.uid à¤¹à¤¾à¤š childId à¤†à¤¹à¥‡
-      const data = doc.data();
-      this.childId = data?.childId || user.uid;
+      // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX #5: childId correctly set Ã¢â€â‚¬Ã¢â€â‚¬
+      // Problem: data.childId (Firestore field) Ã Â¤Â¨Ã Â¥â€¡Ã Â¤Â¹Ã Â¤Â®Ã Â¥â‚¬ Ã Â¤â€¦Ã Â¤Â¸Ã Â¤Â¤ Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â¹Ã Â¥â‚¬
+      // Fix: user.uid Ã Â¤Â¹Ã Â¤Â¾Ã Â¤Å¡ childId Ã Â¤â€ Ã Â¤Â¹Ã Â¥â€¡
+            const data = doc.data();
       this.parentId = data?.parentId || null;
+      let correctChildId = data?.childId || user.uid;
+      
+      if (this.parentId) {
+          try {
+              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
+              if (!childSnap.empty) {
+                  correctChildId = childSnap.docs[0].id;
+                  await firestore().collection('users').doc(user.uid).update({ childId: correctChildId }).catch(()=>{});
+              }
+          } catch(e) { console.log("AutoHeal Error:", e); }
+      }
+      this.childId = correctChildId;
 
       console.log(`RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
 
       if (!this.parentId) {
-        console.log('RemoteCommand: No parent linked yet â€” skipping');
+        console.log('RemoteCommand: No parent linked yet Ã¢â‚¬â€ skipping');
         return;
       }
 
-      // â”€â”€ SOCKET CONNECT â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ SOCKET CONNECT Ã¢â€â‚¬Ã¢â€â‚¬
       this._connectSocket();
 
-      // â”€â”€ NATIVE EVENT LISTENERS â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ NATIVE EVENT LISTENERS Ã¢â€â‚¬Ã¢â€â‚¬
       this._attachNativeListeners();
 
-      // â”€â”€ SET NATIVE INFO â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ SET NATIVE INFO Ã¢â€â‚¬Ã¢â€â‚¬
       if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId).catch(() => {});
       if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId).catch(() => {});
       if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId).catch(() => {});
 
-      // â”€â”€ FIRESTORE COMMAND LISTENER â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ FIRESTORE COMMAND LISTENER Ã¢â€â‚¬Ã¢â€â‚¬
       this._attachCommandListener();
 
       this.isInitialized = true;
-      console.log('âœ… RemoteCommandHandler Ready!');
+      console.log('Ã¢Å“â€¦ RemoteCommandHandler Ready!');
 
     } catch (err) {
-      console.log('âŒ RemoteCommand Init Error:', err);
+      console.log('Ã¢ÂÅ’ RemoteCommand Init Error:', err);
     }
   }
 
@@ -85,7 +96,7 @@ class RemoteCommandHandler {
     });
 
     this.socket.on('connect', () => {
-      console.log('âœ… Child Socket Connected:', this.socket.id);
+      console.log('Ã¢Å“â€¦ Child Socket Connected:', this.socket.id);
       this.socket.emit('join_room', { parentId: this.parentId });
     });
 
@@ -99,8 +110,8 @@ class RemoteCommandHandler {
   }
 
   _attachNativeListeners() {
-    // â”€â”€ BUG FIX: NativeEventEmitter à¤²à¤¾ module pass à¤•à¤°à¤¾ â”€â”€
-    // Problem: NativeEventEmitter() without module â†’ Yellow warning
+    // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: NativeEventEmitter Ã Â¤Â²Ã Â¤Â¾ module pass Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â¾ Ã¢â€â‚¬Ã¢â€â‚¬
+    // Problem: NativeEventEmitter() without module Ã¢â€ â€™ Yellow warning
     const screenEmitter = ScreenMirror ? new NativeEventEmitter(ScreenMirror) : null;
     const cameraEmitter = RemoteCamera ? new NativeEventEmitter(RemoteCamera) : null;
     const audioEmitter  = AmbientAudio ? new NativeEventEmitter(AmbientAudio)  : null;
@@ -164,7 +175,7 @@ class RemoteCommandHandler {
           console.log(`Commands received: ${snap.docs.length}`);
           snap.docs.forEach(doc => {
             const cmdId = doc.id;
-            // â”€â”€ Duplicate execution prevent â”€â”€
+            // Ã¢â€â‚¬Ã¢â€â‚¬ Duplicate execution prevent Ã¢â€â‚¬Ã¢â€â‚¬
             if (this.processingCommands.has(cmdId)) return;
             this.processingCommands.add(cmdId);
             this.handleCommand(cmdId, doc.data());
@@ -181,7 +192,7 @@ class RemoteCommandHandler {
     console.log('Executing command:', command, data);
 
     try {
-      // Status â†’ processing
+      // Status Ã¢â€ â€™ processing
       await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
 
       switch (command) {
@@ -210,14 +221,14 @@ class RemoteCommandHandler {
           break;
 
         case 'START_LIVE_VIEW':
-          // â”€â”€ BUG FIX: Screen Mirror permission UI thread à¤µà¤° â”€â”€
+          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Screen Mirror permission UI thread Ã Â¤ÂµÃ Â¤Â° Ã¢â€â‚¬Ã¢â€â‚¬
           if (ScreenMirror) {
             try {
               await ScreenMirror.requestPermission();
               await ScreenMirror.startLiveView(data.intervalSeconds || 1);
             } catch (e) {
               console.log('ScreenMirror error:', e.message);
-              // Permission denied â†’ status failed
+              // Permission denied Ã¢â€ â€™ status failed
               await firestore().collection('commands').doc(commandId).update({
                 status: 'failed',
                 error: 'Screen permission denied: ' + e.message,
@@ -233,10 +244,10 @@ class RemoteCommandHandler {
           break;
 
         case 'LOCK_DEVICE':
-          // â”€â”€ BUG FIX: Garbled string fixed â”€â”€
+          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Garbled string fixed Ã¢â€â‚¬Ã¢â€â‚¬
           const { Alert } = require('react-native');
           Alert.alert(
-            'ðŸ”’ Phone Locked',
+            'Ã°Å¸â€â€™ Phone Locked',
             'Parent has locked this device.',
             [{ text: 'OK' }],
             { cancelable: false }
@@ -255,7 +266,7 @@ class RemoteCommandHandler {
           console.log('Unknown command:', command);
       }
 
-      // Status â†’ executed
+      // Status Ã¢â€ â€™ executed
       await firestore().collection('commands').doc(commandId).update({
         status: 'executed',
         executedAt: firestore.FieldValue.serverTimestamp(),
@@ -268,7 +279,7 @@ class RemoteCommandHandler {
         error: error.message,
       }).catch(() => {});
     } finally {
-      // Processing set à¤®à¤§à¥‚à¤¨ à¤•à¤¾à¤¢à¤¾
+      // Processing set Ã Â¤Â®Ã Â¤Â§Ã Â¥â€šÃ Â¤Â¨ Ã Â¤â€¢Ã Â¤Â¾Ã Â¤Â¢Ã Â¤Â¾
       setTimeout(() => this.processingCommands.delete(commandId), 5000);
     }
   }

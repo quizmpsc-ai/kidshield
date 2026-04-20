@@ -33,11 +33,9 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     private Handler handler;
     private static final int REQUEST_CODE = 1001;
     private Promise pendingPermissionPromise;
-    private boolean         isMirroring = false;
-        try {
-            Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
-            reactContext.stopService(serviceIntent);
-        } catch(Exception e) { e.printStackTrace(); }
+    
+    // Class level variables
+    private boolean isMirroring = false;
     private int screenWidth, screenHeight, screenDensity;
     private Runnable liveViewRunnable;
 
@@ -49,7 +47,6 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
         wm.getDefaultDisplay().getMetrics(metrics);
-        // Reduce resolution for smoother streaming
         screenWidth = metrics.widthPixels / 2;
         screenHeight = metrics.heightPixels / 2;
         screenDensity = metrics.densityDpi;
@@ -58,7 +55,6 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
     @Override
     public String getName() { return "ScreenMirror"; }
 
-    // (Dummy method for JS compatibility - Firestore logic removed)
     @ReactMethod
     public void setChildInfo(String cId, String pId, Promise promise) {
         promise.resolve(true);
@@ -78,7 +74,8 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         if (mediaProjection == null) { promise.reject("NO_PERMISSION", "Need screen capture permission"); return; }
         if (isMirroring) { promise.resolve(true); return; }
 
-                isMirroring = true;
+        isMirroring = true;
+        
         // Start Foreground Service to satisfy Android 10+
         try {
             Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
@@ -92,8 +89,7 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         startBackgroundThread();
         setupVirtualDisplay();
 
-        // Faster interval for sockets (e.g. 500ms instead of 3000ms)
-        int intervalMs = Math.max(500, intervalSeconds * 1000); 
+        int intervalMs = Math.max(500, intervalSeconds * 1000);
         liveViewRunnable = new Runnable() {
             @Override
             public void run() {
@@ -108,11 +104,14 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
 
     @ReactMethod
     public void stopLiveView(Promise promise) {
-                isMirroring = false;
+        isMirroring = false;
+        
+        // Stop Foreground Service
         try {
             Intent serviceIntent = new Intent(reactContext, ScreenCaptureService.class);
             reactContext.stopService(serviceIntent);
         } catch(Exception e) { e.printStackTrace(); }
+
         if (liveViewRunnable != null && handler != null) {
             handler.removeCallbacks(liveViewRunnable);
         }
@@ -136,7 +135,6 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
         );
     }
 
-    // NEW: Emits frame directly to JS instead of Firestore
     private void captureFrameAndEmit() {
         if (imageReader == null) return;
         try {
@@ -148,7 +146,7 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
             int rowStride = planes[0].getRowStride();
             int pixelStride = planes[0].getPixelStride();
             int w = rowStride / pixelStride;
-            
+
             Bitmap bmp = Bitmap.createBitmap(w, screenHeight, Bitmap.Config.ARGB_8888);
             bmp.copyPixelsFromBuffer(buffer);
             image.close();
@@ -156,8 +154,7 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
             if (w > screenWidth) bmp = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            // Lower quality for faster socket transport
-            bmp.compress(Bitmap.CompressFormat.JPEG, 30, baos); 
+            bmp.compress(Bitmap.CompressFormat.JPEG, 30, baos);
             String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
 
             reactContext
@@ -186,7 +183,7 @@ public class ScreenMirrorModule extends ReactContextBaseJavaModule implements Ac
             }
         }
     }
-    
+
     private void releaseResources() {
         if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
         if (imageReader != null) { try { imageReader.close(); } catch (Exception e) {} imageReader = null; }

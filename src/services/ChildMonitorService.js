@@ -25,14 +25,21 @@ class ChildMonitorService {
     // Get parentId from users collection
     try {
       const userDoc = await firestore().collection('users').doc(this.childId).get();
-      this.parentId = userDoc.data()?.parentId;
-      this.childDocId = userDoc.data()?.childId || this.childId;
+            this.parentId = userDoc.data()?.parentId;
+      let correctChildId = userDoc.data()?.childId || this.childId;
+      if (this.parentId) {
+          try {
+              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
+              if (!childSnap.empty) correctChildId = childSnap.docs[0].id;
+          } catch(e) {}
+      }
+      this.childDocId = correctChildId;
     console.log('ChildMonitor init: UID=', this.childId, ' DocID=', this.childDocId);
     } catch (e) {}
 
     await this.loadAppRules();
     this.listenForCommands();
-    RemoteCommandHandler.init(); // ðŸ”¥ FORCED INIT ðŸ”¥
+    RemoteCommandHandler.init(); // Ã°Å¸â€Â¥ FORCED INIT Ã°Å¸â€Â¥
     this.startLocationTracking();
     this.startUsageReporting();
     this.setupBackgroundFetch();
@@ -47,7 +54,7 @@ class ChildMonitorService {
       await firestore()
         .collection('families').doc(this.parentId)
         .collection('children').doc(this.childDocId)
-        .update({ deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() });
+        .set({ deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() });
     } catch (e) {}
   }
 
@@ -76,13 +83,7 @@ class ChildMonitorService {
         });
     }
 
-    // Also listen on commands collection
-    firestore().collection('commands')
-      .where('childId', '==', (this.childDocId || this.childId))
-      .where('status', '==', 'pending')
-      .onSnapshot(snap => {
-        snap.docs.forEach(d => this.executeCommand(d.id, d.data()));
-      });
+    // (Commands listener removed to prevent race condition with RemoteCommandHandler)
   }
 
   async handleLiveCommand(command, data) {
@@ -100,12 +101,7 @@ class ChildMonitorService {
     }
   }
 
-  async executeCommand(commandId, commandData) {
-    const { command } = commandData;
-    await firestore().collection('commands').doc(commandId)
-      .update({ status: 'executed', executedAt: firestore.FieldValue.serverTimestamp() })
-      .catch(() => {});
-  }
+  
 
   startLocationTracking() {
     this.reportLocation();
@@ -129,7 +125,7 @@ class ChildMonitorService {
               await firestore()
                 .collection('families').doc(this.parentId)
                 .collection('children').doc(this.childDocId)
-                .update({
+                .set({
                   location: { lat: latitude, lng: longitude },
                   locationName: latitude.toFixed(4) + ', ' + longitude.toFixed(4),
                   locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
@@ -185,7 +181,7 @@ class ChildMonitorService {
           .update({
             todayMinutes: usageData.totalMinutes || 0,
             lastSync: firestore.FieldValue.serverTimestamp(),
-          });
+          }, { merge: true });
       }
     } catch(e) { this.reportSystemError("Usage Stats", e.message); }
 
@@ -201,7 +197,7 @@ class ChildMonitorService {
           battery: batteryLevel,
           deviceOnline: true,
           lastSeen: firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
     } catch(e) { this.reportSystemError("Battery Sync", e.message); }
 
     // 3. REAL INSTALLED APPS SYNC

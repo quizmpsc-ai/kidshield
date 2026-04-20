@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Base64;
 import android.view.Surface;
+import android.content.Intent;
 
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
@@ -24,11 +25,9 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     private ImageReader imageReader;
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
-    private boolean         isLiveActive = false;
-        try {
-            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
-            reactContext.stopService(serviceIntent);
-        } catch(Exception e) { e.printStackTrace(); }
+    
+    // Class level variables
+    private boolean isLiveActive = false;
     private Runnable liveRunnable;
     private Handler liveHandler;
     private HandlerThread liveThread;
@@ -42,7 +41,6 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     @Override
     public String getName() { return "RemoteCamera"; }
 
-    // (Dummy method for JS compatibility - Firestore logic removed)
     @ReactMethod
     public void setChildInfo(String cId, String pId, Promise promise) {
         promise.resolve(true);
@@ -51,9 +49,10 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
         if (isLiveActive) { promise.resolve(true); return; }
-        
-                isLiveActive = true;
+
+        isLiveActive = true;
         isFrontCameraActive = useFront;
+        
         // Start Foreground Service to satisfy Android 10+
         try {
             Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
@@ -63,13 +62,13 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                 reactContext.startService(serviceIntent);
             }
         } catch(Exception e) { e.printStackTrace(); }
-        
+
         liveThread = new HandlerThread("LiveCameraThread");
         liveThread.start();
         liveHandler = new Handler(liveThread.getLooper());
 
         int intervalMs = Math.max(500, intervalSeconds * 1000);
-        
+
         liveRunnable = new Runnable() {
             @Override
             public void run() {
@@ -84,11 +83,14 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void stopLiveCamera(Promise promise) {
-                isLiveActive = false;
+        isLiveActive = false;
+        
+        // Stop Foreground Service
         try {
             Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
             reactContext.stopService(serviceIntent);
         } catch(Exception e) { e.printStackTrace(); }
+
         if (liveRunnable != null && liveHandler != null) {
             liveHandler.removeCallbacks(liveRunnable);
         }
@@ -125,12 +127,11 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
             }
             if (cameraId == null) return;
 
-            // Reduce resolution
             int w = 640;
             int h = 480;
-            
+
             imageReader = ImageReader.newInstance(w, h, ImageFormat.JPEG, 1);
-            
+
             imageReader.setOnImageAvailableListener(reader -> {
                 Image image = null;
                 try {
@@ -140,12 +141,11 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                    
-                    // EMIT TO JS INSTEAD OF FIRESTORE
+
                     WritableMap map = Arguments.createMap();
                     map.putString("frame", base64);
                     map.putString("type", useFront ? "camera_front" : "camera_back");
-                    
+
                     reactContext
                         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                         .emit("onCameraFrame", map);
@@ -154,7 +154,7 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     e.printStackTrace();
                 } finally {
                     if (image != null) image.close();
-                    if (!isLiveActive) stopCamera(); 
+                    if (!isLiveActive) stopCamera();
                 }
             }, backgroundHandler);
 
@@ -179,7 +179,7 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
             texture.setDefaultBufferSize(640, 480);
             Surface textureSurface = new Surface(texture);
             Surface readerSurface = imageReader.getSurface();
-            
+
             cameraDevice.createCaptureSession(
                 Arrays.asList(textureSurface, readerSurface),
                 new CameraCaptureSession.StateCallback() {
