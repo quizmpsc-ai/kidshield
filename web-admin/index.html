@@ -362,7 +362,7 @@
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
                 <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">ðŸ”Š Turn Audio ON</button>
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Ã°Å¸â€Å  Turn Audio ON</button>
           <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
              <p style="color:var(--muted)">Select a feature above to start monitoring</p>
           </div>
@@ -513,7 +513,7 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Web Admin connected to Socket.io');
+        console.log('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
@@ -606,11 +606,11 @@ function toggleAudioStream() {
   const btn = document.getElementById('audio-toggle-btn');
   
   if (isAudioActive) {
-    btn.textContent = 'Ã°Å¸â€Å  Mute Audio';
+    btn.textContent = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ…Â  Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
   } else {
-    btn.textContent = 'Ã°Å¸â€â€¡ Turn Audio ON';
+    btn.textContent = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â¡ Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -803,23 +803,22 @@ function deleteCurrentChild() {
 function selectChild(childId, tabEl) {
   if (currentChildId === childId) return;
   currentChildId = childId;
-  document.querySelectorAll('.child-tab').forEach(t => t.classList.remove('active'));
-  tabEl.classList.add('active');
+  document.querySelectorAll(".child-tab").forEach(t => t.classList.remove("active"));
+  tabEl.classList.add("active");
   stopAllLive();
   loadChildData();
-  
+
   // 🔥 FORCE REFRESH CURRENT SECTION FOR NEW CHILD
-  const activeNav = document.querySelector('.nav-item.active');
+  const activeNav = document.querySelector(".nav-item.active");
   if (activeNav) {
-      const sec = activeNav.id.replace('nav-', '');
-      if (sec === 'apps') loadApps();
-      if (sec === 'filter') loadFilter();
-      if (sec === 'alerts') loadAlerts();
-      if (sec === 'location') loadLocation();
-      if (sec === 'screentime') loadScreenTimeSection();
-      if (sec === 'reports') loadReports();
+      const sec = activeNav.id.replace("nav-", "");
+      if (sec === "apps") loadApps();
+      if (sec === "filter") loadFilter();
+      if (sec === "alerts") loadAlerts();
+      if (sec === "location") loadLocation();
+      if (sec === "screentime") loadScreenTimeSection();
+      if (sec === "reports") loadReports();
   }
-}
 }
 
 function loadChildData() {
