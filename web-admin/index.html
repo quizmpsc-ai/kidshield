@@ -313,7 +313,7 @@
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128336; Recent Activity</h3>
+          <h3 class="section-title">&#128336; Recent Activity</h3>`n          <button class="btn btn-danger btn-sm" onclick="deleteCurrentChild()" style="margin-right:auto; margin-left:15px;">&#128465;&#65039; Delete Child</button>
           <button class="btn btn-ghost btn-sm" onclick="loadActivity()">Refresh</button>
         </div>
         <div id="activity-list"><div class="loader"><div class="spinner"></div></div></div>
@@ -362,7 +362,7 @@
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
                 <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">🔊 Turn Audio ON</button>
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">ðŸ”Š Turn Audio ON</button>
           <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
              <p style="color:var(--muted)">Select a feature above to start monitoring</p>
           </div>
@@ -513,7 +513,7 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('Ã¢Å“â€¦ Web Admin connected to Socket.io');
+        console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
@@ -606,11 +606,11 @@ function toggleAudioStream() {
   const btn = document.getElementById('audio-toggle-btn');
   
   if (isAudioActive) {
-    btn.textContent = 'ðŸ”Š Mute Audio';
+    btn.textContent = 'Ã°Å¸â€Å  Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
   } else {
-    btn.textContent = 'ðŸ”‡ Turn Audio ON';
+    btn.textContent = 'Ã°Å¸â€â€¡ Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -789,6 +789,17 @@ async function generatePairingCode() {
   }
 }
 
+function deleteCurrentChild() {
+  if(!currentChildId) return;
+  if(confirm("Are you sure you want to permanently delete this child's data and disconnect the device?")) {
+    db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).delete()
+    .then(() => {
+        alert("Child deleted successfully!");
+        location.reload();
+    }).catch(e => alert("Error: " + e.message));
+  }
+}
+
 function selectChild(childId, tabEl) {
   if (currentChildId === childId) return;
   currentChildId = childId;
@@ -797,12 +808,18 @@ function selectChild(childId, tabEl) {
   stopAllLive();
   loadChildData();
   
-  // 🔥 FIX: Refresh the currently active section for the new child
+  // 🔥 FORCE REFRESH CURRENT SECTION FOR NEW CHILD
   const activeNav = document.querySelector('.nav-item.active');
   if (activeNav) {
-      const sectionName = activeNav.id.replace('nav-', '');
-      showSection(sectionName); 
+      const sec = activeNav.id.replace('nav-', '');
+      if (sec === 'apps') loadApps();
+      if (sec === 'filter') loadFilter();
+      if (sec === 'alerts') loadAlerts();
+      if (sec === 'location') loadLocation();
+      if (sec === 'screentime') loadScreenTimeSection();
+      if (sec === 'reports') loadReports();
   }
+}
 }
 
 function loadChildData() {
