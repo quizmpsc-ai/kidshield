@@ -1,9 +1,19 @@
 const express = require('express');
 const admin = require('firebase-admin');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+
+// Initialize Socket.io with max buffer size for images/audio
+const io = new Server(server, {
+  cors: { origin: '*' },
+  maxHttpBufferSize: 1e8 // 100MB max per frame
+});
+
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
@@ -19,9 +29,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-app.get('/health', (req, res) => res.json({ status: 'KidShield API running', version: '1.2' }));
+app.get('/health', (req, res) => res.json({ status: 'KidShield API running', version: '1.3 (WebSockets Enabled)' }));
 
-// Aliases for React Native api.js compatibility
+// === EXISTING REST APIs ===
 app.post('/api/pair/generate', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -191,5 +201,38 @@ app.get('/reports/pdf/:childId', async (req, res) => {
   } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
 });
 
+// === SOCKET.IO REAL-TIME LOGIC ===
+io.on('connection', (socket) => {
+  console.log('🔗 Client Connected:', socket.id);
+
+  // 1. Join Room (Parent and Child connect to the same Parent ID room)
+  socket.on('join_room', ({ parentId }) => {
+    if (parentId) {
+      socket.join(parentId);
+      console.log(`👤 Socket ${socket.id} joined room: ${parentId}`);
+    }
+  });
+
+  // 2. Stream Screen or Camera Frame (Child -> Parent)
+  socket.on('stream_frame', (data) => {
+    // data: { parentId, childId, frameBase64, type }
+    if (data.parentId) {
+      io.to(data.parentId).emit('receive_frame', data);
+    }
+  });
+
+  // 3. Stream Ambient Audio (Child -> Parent)
+  socket.on('stream_audio', (data) => {
+    // data: { parentId, childId, audioLevel, isMuted }
+    if (data.parentId) {
+      io.to(data.parentId).emit('receive_audio', data);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ Client Disconnected:', socket.id);
+  });
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`KidShield API v1.2 running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 KidShield API v1.3 (WebSockets Enabled) running on port ${PORT}`));
