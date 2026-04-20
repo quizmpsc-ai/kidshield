@@ -146,9 +146,9 @@
 
 <div id="login-page">
   <div class="login-card">
-    <div class="login-logo">&#128737;&#65039;</div>
+    <div class="login-logo">🛡️</div>
     <h1 class="login-title">KidShield</h1>
-    <p class="login-sub">Web Admin Dashboard &#8212; Parent Login</p>
+    <p class="login-sub">Web Admin Dashboard — Parent Login</p>
     <div style="margin-bottom:14px">
       <input type="email" id="login-email" placeholder="Email address" />
     </div>
@@ -163,7 +163,7 @@
 
 <div class="modal-overlay" id="modal-add-child" onclick="handleModalOutsideClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">&#128118; Add Child Device</div>
+    <div class="modal-title">👶 Add Child Device</div>
     <div id="modal-step-1">
       <div class="modal-field">
         <label>Child's Name</label>
@@ -176,11 +176,11 @@
       <div class="modal-field">
         <label>Emoji Avatar</label>
         <select id="child-emoji">
-          <option value="&#128102;">&#128102; Boy</option>
-          <option value="&#128103;">&#128103; Girl</option>
-          <option value="&#129490;">&#129490; Child</option>
-          <option value="&#128118;">&#128118; Baby</option>
-          <option value="&#129489;">&#129489; Teen</option>
+          <option value="👦">👦 Boy</option>
+          <option value="👧">👧 Girl</option>
+          <option value="🧒">🧒 Child</option>
+          <option value="👶">👶 Baby</option>
+          <option value="🧑">🧑 Teen</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -202,7 +202,7 @@
         <p style="font-size:13px;">4. Enable all permissions</p>
       </div>
       <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:12px;background:#0d1a2d;border-radius:10px">
-        &#9203; Waiting for child device to connect...
+        ⏳ Waiting for child device to connect...
       </div>
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
@@ -213,7 +213,7 @@
 
 <div class="modal-overlay" id="modal-time-limit" onclick="handleModalOutsideClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">&#9201;&#65039; Screen Time Limits</div>
+    <div class="modal-title">⏱️ Screen Time Limits</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Set daily screen time limit and bedtime for selected child.</p>
     <div class="modal-field">
       <label>Daily Limit (hours)</label>
@@ -248,37 +248,37 @@
 <div id="app">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="sidebar-logo-text">&#128737;&#65039; KidShield</div>
+      <div class="sidebar-logo-text">🛡️ KidShield</div>
       <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
     </div>
     <nav style="flex:1;display:flex;flex-direction:column;gap:2px;">
       <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
-        <span class="nav-icon">&#127968;</span><span class="nav-label">Overview</span>
+        <span class="nav-icon">🏠</span><span class="nav-label">Overview</span>
       </div>
       <div class="nav-item" onclick="showSection('location')" id="nav-location">
-        <span class="nav-icon">&#128205;</span><span class="nav-label">Location</span>
+        <span class="nav-icon">📍</span><span class="nav-label">Location</span>
       </div>
       <div class="nav-item" onclick="showSection('live')" id="nav-live">
-        <span class="nav-icon">&#128249;</span><span class="nav-label">Live Monitor</span>
+        <span class="nav-icon">📹</span><span class="nav-label">Live Monitor</span>
       </div>
       <div class="nav-item" onclick="showSection('apps')" id="nav-apps">
-        <span class="nav-icon">&#128241;</span><span class="nav-label">App Control</span>
+        <span class="nav-icon">📱</span><span class="nav-label">App Control</span>
       </div>
       <div class="nav-item" onclick="showSection('screentime')" id="nav-screentime">
-        <span class="nav-icon">&#9201;&#65039;</span><span class="nav-label">Screen Time</span>
+        <span class="nav-icon">⏱️</span><span class="nav-label">Screen Time</span>
       </div>
       <div class="nav-item" onclick="showSection('filter')" id="nav-filter">
-        <span class="nav-icon">&#128274;</span><span class="nav-label">Web Filter</span>
+        <span class="nav-icon">🔒</span><span class="nav-label">Web Filter</span>
       </div>
       <div class="nav-item" onclick="showSection('reports')" id="nav-reports">
-        <span class="nav-icon">&#128202;</span><span class="nav-label">Reports</span>
+        <span class="nav-icon">📊</span><span class="nav-label">Reports</span>
       </div>
       <div class="nav-item" onclick="showSection('alerts')" id="nav-alerts">
-        <span class="nav-icon">&#128276;</span><span class="nav-label">Alerts</span>
+        <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span>
       </div>
     </nav>
     <div class="nav-item nav-logout" onclick="doLogout()">
-      <span class="nav-icon">&#128682;</span><span class="nav-label">Logout</span>
+      <span class="nav-icon">🚪</span><span class="nav-label">Logout</span>
     </div>
   </aside>
 
@@ -291,29 +291,30 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div id="device-status-badge" class="stat-badge stat-badge-offline">Offline</div>
-          <div class="stat-icon">&#9201;&#65039;</div>
+          <div class="stat-icon">⏱️</div>
           <div class="stat-val" id="stat-screentime">--</div>
           <div class="stat-lbl">Screen Time Today</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">&#128683;</div>
+          <div class="stat-icon">🚫</div>
           <div class="stat-val" id="stat-blocked">--</div>
           <div class="stat-lbl">Blocked Attempts</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">&#128267;</div>
+          <div class="stat-icon">🔋</div>
           <div class="stat-val" id="stat-battery">--%</div>
           <div class="stat-lbl">Battery Level</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">&#128205;</div>
+          <div class="stat-icon">📍</div>
           <div class="stat-val" id="stat-location" style="font-size:16px;margin-top:4px">--</div>
           <div class="stat-lbl">Current Location</div>
         </div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128336; Recent Activity</h3>`n          <button class="btn btn-danger btn-sm" onclick="deleteCurrentChild()" style="margin-right:auto; margin-left:15px;">&#128465;&#65039; Delete Child</button>
+          <h3 class="section-title">🕒 Recent Activity</h3>
+          <button class="btn btn-danger btn-sm" onclick="deleteCurrentChild()" style="margin-right:auto; margin-left:15px;">🗑️ Delete Child</button>
           <button class="btn btn-ghost btn-sm" onclick="loadActivity()">Refresh</button>
         </div>
         <div id="activity-list"><div class="loader"><div class="spinner"></div></div></div>
@@ -323,11 +324,11 @@
     <div id="section-location" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128205; Real-time Location</h3>
+          <h3 class="section-title">📍 Real-time Location</h3>
           <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
         </div>
         <div id="map-area" class="map-placeholder">
-          <span style="font-size:48px">&#128506;&#65039;</span>
+          <span style="font-size:48px">🗺️</span>
           <p>Select a child to view location</p>
           <p id="location-coords" style="font-size:13px;color:var(--accent)"></p>
         </div>
@@ -337,31 +338,31 @@
 
     <div id="section-live" style="display:none">
       <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#fca5a5;">
-        &#9888;&#65039; <strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.
+        ⚠️ <strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.
       </div>
       <div class="live-grid">
         <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
-          <div class="live-icon">&#128187;</div>
+          <div class="live-icon">💻</div>
           <div class="live-title">Screen Mirror</div>
           <div class="live-status" id="status-screen">Click to start</div>
         </div>
         <div class="live-card" id="card-camera_back" onclick="toggleLive('camera_back')">
-          <div class="live-icon">&#128247;</div>
+          <div class="live-icon">📷</div>
           <div class="live-title">Back Camera</div>
           <div class="live-status" id="status-camera_back">Click to start</div>
         </div>
         <div class="live-card" id="card-camera_front" onclick="toggleLive('camera_front')">
-          <div class="live-icon">&#129331;</div>
+          <div class="live-icon">🤳</div>
           <div class="live-title">Front Camera</div>
           <div class="live-status" id="status-camera_front">Click to start</div>
         </div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title" id="live-section-title">&#128249; Live Feed</h3>
-          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
+          <h3 class="section-title" id="live-section-title">📹 Live Feed</h3>
+          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">⏹ Stop</button>
         </div>
-                <div class="stream-area" id="stream-area" style="position:relative;">
+        <div class="stream-area" id="stream-area" style="position:relative;">
           <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
           <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
              <p style="color:var(--muted)">Select a feature above to start monitoring</p>
@@ -373,7 +374,7 @@
     <div id="section-apps" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128241; Installed Apps</h3>
+          <h3 class="section-title">📱 Installed Apps</h3>
           <div style="display:flex;gap:10px;align-items:center">
             <input type="text" placeholder="Search apps..." style="width:180px" oninput="filterApps(this.value)" />
             <button class="btn btn-ghost btn-sm" onclick="loadApps()">Refresh</button>
@@ -386,8 +387,8 @@
     <div id="section-screentime" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#9201;&#65039; Screen Time Limits</h3>
-          <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">&#9999;&#65039; Edit Limits</button>
+          <h3 class="section-title">⏱️ Screen Time Limits</h3>
+          <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">✏️ Edit Limits</button>
         </div>
         <div id="screentime-info">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
@@ -419,7 +420,7 @@
 
     <div id="section-filter" style="display:none">
       <div class="section">
-        <div class="section-header"><h3 class="section-title">&#128274; Website Filter</h3></div>
+        <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
         <div style="margin-bottom:24px">
           <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Category Blocks</h4>
           <div id="category-toggles"><div class="loader"><div class="spinner"></div></div></div>
@@ -438,14 +439,14 @@
     <div id="section-reports" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128202; Weekly Report</h3>
-          <button class="btn btn-primary btn-sm" onclick="downloadReport()">&#128196; Download PDF</button>
+          <h3 class="section-title">📊 Weekly Report</h3>
+          <button class="btn btn-primary btn-sm" onclick="downloadReport()">📄 Download PDF</button>
         </div>
         <div id="top-apps-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128200; Website Activity</h3>
+          <h3 class="section-title">📈 Website Activity</h3>
         </div>
         <div id="top-sites-list"><div class="loader"><div class="spinner"></div></div></div>
       </div>
@@ -454,7 +455,7 @@
     <div id="section-alerts" style="display:none">
       <div class="section">
         <div class="section-header">
-          <h3 class="section-title">&#128276; All Alerts</h3>
+          <h3 class="section-title">🔔 All Alerts</h3>
           <div style="display:flex;gap:8px">
             <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:8px 12px">
               <option value="">All Types</option>
@@ -462,6 +463,7 @@
               <option value="blocked_app">Blocked Apps</option>
               <option value="location">Location</option>
               <option value="screen_time">Screen Time</option>
+              <option value="system_error">System Errors</option>
             </select>
             <button class="btn btn-ghost btn-sm" onclick="loadAlerts()">Refresh</button>
           </div>
@@ -473,28 +475,47 @@
 </div>
 
 <script>
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// KidShield Web Admin â€” Live Monitor FIXED JavaScript
-// index.html à¤®à¤§à¥€à¤² <script> section à¤®à¤§à¥à¤¯à¥‡ replace à¤•à¤°à¤¾
-//
-// BUGS FIXED:
-// 1. receive_frame type mismatch (camera_back vs camera_back)
-// 2. Audio socket listener â€” socket null à¤…à¤¸à¤¤à¤¾à¤¨à¤¾ attach à¤¹à¥‹à¤¤ à¤¹à¥‹à¤¤à¤¾
-// 3. stopAllLive â€” STOP_LIVE_CAMERA missing for camera modes
-// 4. Connection timeout error message â€” encoding fixed
-// 5. Audio listener duplicate registration
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ==========================================
+// 1. CONFIGURATION & FIREBASE INIT
+// ==========================================
+const firebaseConfig = {
+  apiKey: "AIzaSyC6NE6XH7Bv_g1XJRik2wsbMTPxXDglyPs",
+  authDomain: "kidshield-8744e.firebaseapp.com",
+  databaseURL: "https://kidshield-8744e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kidshield-8744e",
+  storageBucket: "kidshield-8744e.firebasestorage.app",
+  messagingSenderId: "966097917754",
+  appId: "1:966097917754:web:67c2cca3cc78ad77cf6203"
+};
 
-// â”€â”€ Global variables (existing code à¤¸à¥‹à¤¬à¤¤ merge à¤•à¤°à¤¾) â”€â”€
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Globals
 let currentParentId = null;
 let currentChildId = null;
+let currentChildData = {};
+let allApps = [];
+let locationUnsubscribe = null;
+let statsUnsubscribe = null;
+let pairingUnsubscribe = null;
 let currentLiveMode = null;
 let liveTimeout = null;
-let socket = null;
+let statsInterval = null;
+let socket = null; 
+let isAudioActive = false;
+let audioListenerAttached = false; 
+
+const BACKEND_URL = 'https://kidshield-0757.onrender.com';
+const LIVE_TIMEOUT_MS = 15000;
+
+// ==========================================
+// 2. EXACT ERROR TRACKER & SEND COMMAND
+// ==========================================
 async function sendCommand(command, data = {}) {
   if (!currentChildId || !currentParentId) return;
   try {
-    // 1. Send the command to Firestore
     const cmdRef = await db.collection('commands').add({
       childId: currentChildId,
       parentId: currentParentId,
@@ -506,7 +527,7 @@ async function sendCommand(command, data = {}) {
 
     console.log(`Command sent: ${command}`, data);
 
-    // 2. 🔥 EXACT ERROR TRACKER (Live Listener) 🔥
+    // EXACT ERROR TRACKER (Live Listener)
     const unsub = cmdRef.onSnapshot(doc => {
        const cmdData = doc.data();
        if (!cmdData) return;
@@ -514,10 +535,8 @@ async function sendCommand(command, data = {}) {
        if (cmdData.status === 'failed') {
            const exactError = cmdData.error || "Unknown Technical Error";
            
-           // A. Show Exact Error Alert Pop-up
            alert("❌ APP ERROR [" + command + "]:\n\n" + exactError);
 
-           // B. Stop loading spinner and show exact error on screen
            if(liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
            const sContent = document.getElementById('stream-content');
            if(sContent) {
@@ -534,10 +553,10 @@ async function sendCommand(command, data = {}) {
            const statusEl = document.getElementById('status-' + currentLiveMode);
            if(statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
            
-           unsub(); // Stop listening after error
+           unsub(); 
        } else if (cmdData.status === 'executed') {
            console.log(`Command ${command} executed successfully by phone!`);
-           unsub(); // Stop tracking once successful
+           unsub(); 
        }
     });
 
@@ -546,20 +565,14 @@ async function sendCommand(command, data = {}) {
   }
 }
 
-let isAudioActive = false;
-let audioListenerAttached = false; // BUG FIX #2: duplicate listener prevent à¤•à¤°à¤¤à¥‹
-
-const BACKEND_URL = 'https://kidshield-0757.onrender.com';
-const LIVE_TIMEOUT_MS = 15000; // 15 seconds timeout
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SOCKET INIT â€” Auth à¤¨à¤‚à¤¤à¤° call à¤•à¤°à¤¾
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ==========================================
+// 3. SOCKET & LIVE MONITOR LOGIC
+// ==========================================
 function initSocket(userId) {
-  if (socket && socket.connected) return; // à¤†à¤§à¥€à¤š connected
+  if (socket && socket.connected) return;
 
   socket = io(BACKEND_URL, {
-    transports: ['websocket', 'polling'], // WebSocket first, polling fallback
+    transports: ['websocket', 'polling'], 
     timeout: 10000,
     reconnection: true,
     reconnectionAttempts: 5,
@@ -567,28 +580,18 @@ function initSocket(userId) {
   });
 
   socket.on('connect', () => {
-    console.log('âœ… Web Admin connected to Socket.io:', socket.id);
+    console.log('✅ Web Admin connected to Socket.io:', socket.id);
     socket.emit('join_room', { parentId: userId });
-    document.getElementById('socket-status')?.setAttribute('data-connected', 'true');
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('âŒ Socket disconnected:', reason);
-    document.getElementById('socket-status')?.setAttribute('data-connected', 'false');
-    // Auto reconnect à¤¹à¥‹à¤ˆà¤² â€” manual à¤¨à¤•à¥‹
+    console.log('❌ Socket disconnected:', reason);
   });
 
-  socket.on('connect_error', (err) => {
-    console.log('Socket connect error:', err.message);
-  });
-
-  // â”€â”€ BUG FIX #1: receive_frame type check FIXED â”€â”€
-  // Problem: currentLiveMode = 'camera_back' à¤ªà¤£ data.type = 'camera_back' â€” check logic à¤šà¥à¤•à¥€à¤šà¤¾ à¤¹à¥‹à¤¤à¤¾
   socket.on('receive_frame', (data) => {
     if (!currentLiveMode) return;
-    if (data.childId !== currentChildId) return; // wrong child
+    if (data.childId !== currentChildId) return;
 
-    // TYPE MATCHING â€” à¤¸à¤—à¤³à¥‡ cases handle
     const typeMatch =
       (currentLiveMode === 'screen'       && data.type === 'screen') ||
       (currentLiveMode === 'camera_back'  && data.type === 'camera_back') ||
@@ -596,13 +599,11 @@ function initSocket(userId) {
 
     if (!typeMatch) return;
 
-    // Frame à¤®à¤¿à¤³à¤¾à¤²à¤¾ â€” timeout clear à¤•à¤°à¤¾
     if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
 
     const streamContent = document.getElementById('stream-content');
     if (!streamContent) return;
 
-    // Image display
     streamContent.innerHTML = `
       <img
         src="data:image/jpeg;base64,${data.frameBase64}"
@@ -610,23 +611,17 @@ function initSocket(userId) {
         onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
       />`;
 
-    // Status update
     const statusEl = document.getElementById('status-' + currentLiveMode);
     if (statusEl) {
-      statusEl.textContent = 'Live â—';
+      statusEl.textContent = 'Live ●';
       statusEl.className = 'live-status on';
     }
-
-    // Audio button à¤¦à¤¾à¤–à¤µà¤¾
     document.getElementById('audio-toggle-btn').style.display = 'block';
   });
 
-  // â”€â”€ BUG FIX #2: Audio listener â€” socket init à¤¨à¤‚à¤¤à¤° DIRECTLY attach â”€â”€
-  // Problem: setTimeout(2000) à¤®à¤§à¥à¤¯à¥‡ socket à¤…à¤œà¥‚à¤¨ null à¤…à¤¸à¤¾à¤¯à¤šà¤¾
   attachAudioListener();
 }
 
-// â”€â”€ BUG FIX #2: Separate function â€” à¤à¤•à¤¦à¤¾à¤š attach à¤¹à¥‹à¤¤à¥‹ â”€â”€
 function attachAudioListener() {
   if (audioListenerAttached || !socket) return;
   audioListenerAttached = true;
@@ -637,131 +632,74 @@ function attachAudioListener() {
     if (!data.audioBase64) return;
 
     try {
-      // WAV audio play à¤•à¤°à¤¾
       const audioSrc = 'data:audio/wav;base64,' + data.audioBase64;
       const audio = new Audio(audioSrc);
       audio.volume = 1.0;
-      audio.play().catch(e => {
-        // Autoplay blocked â€” user interaction à¤¨à¤‚à¤¤à¤° retry
-        console.log('Audio autoplay blocked:', e.message);
-      });
+      audio.play().catch(e => console.log('Audio blocked:', e.message));
     } catch (e) {
       console.log('Audio play error:', e);
     }
   });
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TOGGLE LIVE â€” BUG FIX #3, #4
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function toggleLive(mode) {
-  if (!currentChildId) {
-    alert('Please select a child first');
-    return;
-  }
+  if (!currentChildId) { alert('Please select a child first'); return; }
+  if (currentLiveMode === mode) { stopAllLive(); return; }
 
-  // Same mode click â†’ stop
-  if (currentLiveMode === mode) {
-    stopAllLive();
-    return;
-  }
-
-  // à¤†à¤§à¥€à¤šà¥‡ à¤¬à¤‚à¤¦ à¤•à¤°à¤¾
   stopAllLive();
-
   currentLiveMode = mode;
 
-  // UI update
   document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
   document.getElementById('card-' + mode)?.classList.add('active');
   document.getElementById('btn-stop-live').style.display = 'block';
 
-  const titles = {
-    screen:        'ðŸ–¥ï¸ Screen Mirror â€” Live',
-    camera_back:   'ðŸ“· Back Camera â€” Live',
-    camera_front:  'ðŸ¤³ Front Camera â€” Live',
-  };
-  document.getElementById('live-section-title').innerHTML = titles[mode] || 'ðŸ“¹ Live Feed';
+  const titles = { screen: '🖥️ Screen Mirror — Live', camera_back: '📷 Back Camera — Live', camera_front: '🤳 Front Camera — Live' };
+  document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
 
   const streamContent = document.getElementById('stream-content');
   streamContent.innerHTML = `
     <div style="text-align:center;padding:40px">
       <div class="spinner" style="margin:0 auto 16px"></div>
       <p style="color:var(--muted)">Connecting via WebSockets...</p>
-      <p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open & running</p>
     </div>`;
 
-  // Audio button hide (frame à¤¯à¥‡à¤ˆà¤² à¤¤à¥‡à¤µà¥à¤¹à¤¾ à¤¦à¤¾à¤–à¤µà¥‚)
   document.getElementById('audio-toggle-btn').style.display = 'none';
 
-  // â”€â”€ BUG FIX #4: Connection Timeout â€” clean error message â”€â”€
   if (liveTimeout) clearTimeout(liveTimeout);
   liveTimeout = setTimeout(() => {
     if (!currentLiveMode) return;
-    const streamContent = document.getElementById('stream-content');
-    if (streamContent) {
-      streamContent.innerHTML = `
+    const sContent = document.getElementById('stream-content');
+    if (sContent) {
+      sContent.innerHTML = `
         <div style="text-align:center;padding:40px;color:#ef4444;">
-          <div style="font-size:48px;margin-bottom:16px">âš ï¸</div>
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
           <div style="font-size:18px;font-weight:700;margin-bottom:12px">Connection Timeout</div>
-          <div style="font-size:13px;color:#fca5a5;line-height:1.8;max-width:320px;margin:0 auto">
-            <strong>Why is this happening?</strong><br>
-            1. KidShield app is closed or killed by Battery Saver<br>
-            2. Internet is OFF on child phone<br>
-            3. Camera/Mic permissions are denied<br>
-            4. Child phone screen is off (background restricted)
+          <div style="font-size:13px;color:#fca5a5;max-width:320px;margin:0 auto">
+            1. App is closed/killed<br>2. Internet is OFF<br>3. Permissions denied
           </div>
-          <div style="margin-top:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;font-size:12px;color:#fca5a5">
-            <strong>Fix:</strong> Open KidShield app on child phone, check permissions, then try again.
-          </div>
-          <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">
-            ðŸ”„ Retry
-          </button>
+          <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">Retry</button>
         </div>`;
     }
-    // Status reset
     const statusEl = document.getElementById('status-' + mode);
-    if (statusEl) { statusEl.textContent = 'Connection Failed'; statusEl.className = 'live-status'; }
+    if (statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
   }, LIVE_TIMEOUT_MS);
 
-  // Firestore command à¤ªà¤¾à¤ à¤µà¤¾
-  if (mode === 'screen') {
-    sendCommand('START_LIVE_VIEW', { intervalSeconds: 1 });
-  } else if (mode === 'camera_back') {
-    sendCommand('START_LIVE_CAMERA', { useFront: false, intervalSeconds: 1 });
-  } else if (mode === 'camera_front') {
-    sendCommand('START_LIVE_CAMERA', { useFront: true, intervalSeconds: 1 });
-  }
+  if (mode === 'screen') sendCommand('START_LIVE_VIEW', { intervalSeconds: 1 });
+  else if (mode === 'camera_back') sendCommand('START_LIVE_CAMERA', { useFront: false, intervalSeconds: 1 });
+  else if (mode === 'camera_front') sendCommand('START_LIVE_CAMERA', { useFront: true, intervalSeconds: 1 });
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// STOP ALL LIVE â€” BUG FIX #3
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function stopAllLive() {
-  // Timeout clear
   if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
 
-  // â”€â”€ BUG FIX #3: à¤¸à¤—à¤³à¥à¤¯à¤¾ modes à¤¸à¤¾à¤ à¥€ stop command à¤ªà¤¾à¤ à¤µà¤¾ â”€â”€
-  if (currentLiveMode === 'screen') {
-    sendCommand('STOP_LIVE_VIEW');
-  } else if (currentLiveMode === 'camera_back' || currentLiveMode === 'camera_front') {
-    sendCommand('STOP_LIVE_CAMERA');
-  }
+  if (currentLiveMode === 'screen') sendCommand('STOP_LIVE_VIEW');
+  else if (currentLiveMode === 'camera_back' || currentLiveMode === 'camera_front') sendCommand('STOP_LIVE_CAMERA');
 
-  // Audio à¤ªà¤£ à¤¬à¤‚à¤¦ à¤•à¤°à¤¾
-  if (isAudioActive) {
-    sendCommand('STOP_AUDIO_CAPTURE');
-    isAudioActive = false;
-  }
-
-  // UI reset
+  if (isAudioActive) { sendCommand('STOP_AUDIO_CAPTURE'); isAudioActive = false; }
   currentLiveMode = null;
 
   document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
-  document.querySelectorAll('.live-status').forEach(s => {
-    s.textContent = 'Click to start';
-    s.className = 'live-status';
-  });
+  document.querySelectorAll('.live-status').forEach(s => { s.textContent = 'Click to start'; s.className = 'live-status'; });
 
   document.getElementById('btn-stop-live').style.display = 'none';
   document.getElementById('audio-toggle-btn').style.display = 'none';
@@ -769,61 +707,28 @@ function stopAllLive() {
   document.getElementById('audio-toggle-btn').className = 'btn btn-primary btn-sm';
 
   const streamContent = document.getElementById('stream-content');
-  if (streamContent) {
-    streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
-  }
-  document.getElementById('live-section-title').innerHTML = 'ðŸ“¹ Live Feed';
+  if (streamContent) streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
+  document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TOGGLE AUDIO
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function toggleAudioStream() {
   if (!currentChildId || !currentLiveMode) return;
   isAudioActive = !isAudioActive;
-
   const btn = document.getElementById('audio-toggle-btn');
   if (isAudioActive) {
-    btn.textContent = 'ðŸ”‡ Mute Audio';
-    btn.classList.remove('btn-primary');
-    btn.classList.add('btn-danger');
+    btn.textContent = '🔇 Mute Audio';
+    btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'audio_' + Date.now() });
   } else {
     btn.textContent = 'Turn Audio ON';
-    btn.classList.remove('btn-danger');
-    btn.classList.add('btn-primary');
+    btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SEND COMMAND TO CHILD (Firestore)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-async function disabled_sendCommand(command, data = {}) {
-  if (!currentChildId || !currentParentId) {
-    console.log('sendCommand: No child/parent selected');
-    return;
-  }
-  try {
-    await firebase.firestore().collection('commands').add({
-      childId: currentChildId,
-      parentId: currentParentId,
-      command,
-      data,
-      status: 'pending',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    console.log(`Command sent: ${command}`, data);
-  } catch (e) {
-    console.error('sendCommand error:', e);
-  }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// AUTH STATE â€” Socket init à¤¯à¥‡à¤¥à¥‡ trigger à¤•à¤°à¤¾
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// à¤¤à¥à¤®à¤šà¥à¤¯à¤¾ existing auth.onAuthStateChanged à¤®à¤§à¥à¤¯à¥‡ à¤¹à¥‡ replace à¤•à¤°à¤¾:
-/*
+// ==========================================
+// 4. AUTH & CORE LOGIC
+// ==========================================
 auth.onAuthStateChanged(user => {
   if (user) {
     currentParentId = user.uid;
@@ -831,22 +736,274 @@ auth.onAuthStateChanged(user => {
     document.getElementById('app').style.display = 'block';
     document.getElementById('parent-email-display').textContent = user.email;
 
-    // âœ… FIXED: initSocket function call à¤•à¤°à¤¾
     initSocket(user.uid);
-
     loadChildren();
+    if (statsInterval) clearInterval(statsInterval);
+    statsInterval = setInterval(loadLiveStats, 30000);
   } else {
     stopAllLive();
     document.getElementById('login-page').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
     currentParentId = null;
     currentChildId = null;
-    audioListenerAttached = false; // reset for next login
+    audioListenerAttached = false;
+    if (statsInterval) clearInterval(statsInterval);
     if (socket) { socket.disconnect(); socket = null; }
   }
 });
-*/
 
+function doRegister(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pass) return showLoginError('Enter email and password');
+  firebase.auth().createUserWithEmailAndPassword(email, pass).catch(e => showLoginError(e.message));
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pass) return showLoginError('Enter email and password');
+  firebase.auth().signInWithEmailAndPassword(email, pass).catch(e => showLoginError('Login failed: ' + e.message));
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function doLogout() { auth.signOut(); }
+
+document.getElementById('login-password').addEventListener('keypress', function(e) { if (e.key === 'Enter') doLogin(); });
+
+// ==========================================
+// 5. CHILDREN & TABS LOGIC
+// ==========================================
+async function loadChildren() {
+  const tabsEl = document.getElementById('children-tabs');
+  tabsEl.innerHTML = '';
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').get();
+    let firstChild = null;
+    snap.forEach(doc => {
+      const child = { id: doc.id, ...doc.data() };
+      if (!firstChild) firstChild = child;
+      const tab = document.createElement('div');
+      const isActive = currentChildId === child.id;
+      tab.className = 'child-tab' + (isActive ? ' active' : '');
+      tab.innerHTML = (child.emoji || '👦') + ' ' + child.name;
+      tab.onclick = () => selectChild(child.id, tab);
+      tabsEl.appendChild(tab);
+    });
+
+    if (!currentChildId && firstChild) {
+      currentChildId = firstChild.id;
+      const firstTab = tabsEl.querySelector('.child-tab');
+      if (firstTab) firstTab.classList.add('active');
+      loadChildData();
+    } else if (!firstChild) {
+      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:4px 8px;">No children yet —</span>';
+    }
+  } catch (err) { console.error(err); }
+
+  const addBtn = document.createElement('div');
+  addBtn.className = 'child-tab child-tab-add';
+  addBtn.innerHTML = '+ Add Child';
+  addBtn.onclick = () => openAddChildModal();
+  tabsEl.appendChild(addBtn);
+}
+
+function selectChild(childId, tabEl) {
+  if (currentChildId === childId) return;
+  currentChildId = childId;
+  document.querySelectorAll(".child-tab").forEach(t => t.classList.remove("active"));
+  tabEl.classList.add("active");
+  stopAllLive();
+  loadChildData();
+
+  const activeNav = document.querySelector(".nav-item.active");
+  if (activeNav) {
+      const sec = activeNav.id.replace("nav-", "");
+      if (sec === "apps") loadApps();
+      if (sec === "filter") loadFilter();
+      if (sec === "alerts") loadAlerts();
+      if (sec === "location") loadLocation();
+      if (sec === "screentime") loadScreenTimeSection();
+  }
+}
+
+function loadChildData() {
+  loadActivity();
+  loadLiveStats();
+  subscribeToChildStats();
+}
+
+// Modals
+function openAddChildModal() {
+  document.getElementById('modal-add-child').classList.add('open');
+  document.getElementById('modal-step-1').style.display = 'block';
+  document.getElementById('modal-step-2').style.display = 'none';
+}
+function closeModal() { document.getElementById('modal-add-child').classList.remove('open'); }
+function handleModalOutsideClick(e) { if (e.target === e.currentTarget) closeModal(); }
+
+async function generatePairingCode() {
+  const name = document.getElementById('child-name').value.trim();
+  if (!name) return alert('Enter child name');
+  const code = Math.random().toString(36).substr(2, 6).toUpperCase();
+  const childId = 'child_' + Date.now();
+  try {
+    await db.collection('families').doc(currentParentId).collection('children').doc(childId).set({
+      name, age: parseInt(document.getElementById('child-age').value)||0, emoji: document.getElementById('child-emoji').value||'👦',
+      pairingCode: code, paired: false, deviceOnline: false, todayMinutes: 0, battery: null, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('pairing_codes').doc(code).set({
+      parentId: currentParentId, childId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), expiresAt: new Date(Date.now() + 24*3600000)
+    });
+    document.getElementById('pairing-code-text').textContent = code;
+    document.getElementById('modal-step-1').style.display = 'none';
+    document.getElementById('modal-step-2').style.display = 'block';
+    loadChildren();
+  } catch (err) { alert(err.message); }
+}
+
+function deleteCurrentChild() {
+  if(!currentChildId) return;
+  if(confirm("Permanently delete this child's data?")) {
+    db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).delete()
+    .then(() => { alert("Deleted!"); location.reload(); }).catch(e => alert(e.message));
+  }
+}
+
+// ==========================================
+// 6. DASHBOARD & STATS LOGIC
+// ==========================================
+function showSection(name) {
+  document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
+  const sec = document.getElementById('section-' + name);
+  if (sec) sec.style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-' + name)?.classList.add('active');
+
+  if (name !== 'live') stopAllLive();
+  if (name !== 'location' && locationUnsubscribe) { locationUnsubscribe(); locationUnsubscribe = null; }
+
+  if (name === 'apps') loadApps();
+  if (name === 'filter') loadFilter();
+  if (name === 'alerts') loadAlerts();
+  if (name === 'location') loadLocation();
+  if (name === 'screentime') loadScreenTimeSection();
+}
+
+function subscribeToChildStats() {
+  if (statsUnsubscribe) statsUnsubscribe();
+  if (!currentChildId) return;
+  statsUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).onSnapshot(doc => {
+    currentChildData = doc.data() || {};
+    updateStatsUI(currentChildData);
+  });
+}
+
+function updateStatsUI(data) {
+  const mins = data.todayMinutes || 0;
+  document.getElementById('stat-screentime').textContent = Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
+  document.getElementById('stat-battery').textContent = (data.battery != null ? data.battery : '--') + '%';
+  document.getElementById('stat-location').textContent = data.locationName || 'Unknown';
+  const badge = document.getElementById('device-status-badge');
+  badge.textContent = data.deviceOnline ? '● Online' : '○ Offline';
+  badge.className = data.deviceOnline ? 'stat-badge stat-badge-online' : 'stat-badge stat-badge-offline';
+}
+
+async function loadLiveStats() {
+  if (!currentChildId || !currentParentId) return;
+  const doc = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).get();
+  currentChildData = doc.data() || {};
+  updateStatsUI(currentChildData);
+  loadScreenTimeSection();
+}
+
+async function loadActivity() {
+  if (!currentChildId) return;
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('activity').orderBy('timestamp','desc').limit(15).get();
+    const el = document.getElementById('activity-list');
+    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;">No activity yet</p>'; return; }
+    el.innerHTML = '<table><tbody>' + snap.docs.map(doc => {
+      const d = doc.data();
+      const time = d.timestamp?.toDate?.()?.toLocaleTimeString() || '--';
+      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type||'--'}</td><td>${d.details||'--'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+  } catch(e) {}
+}
+
+// ==========================================
+// 7. MODULES (Apps, Filter, Time, Location)
+// ==========================================
+async function loadApps() {
+  if (!currentChildId) return;
+  document.getElementById('apps-list').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+  try {
+    const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').get();
+    allApps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    filterApps('');
+  } catch(e) {}
+}
+function filterApps(q) {
+  const filtered = allApps.filter(a => (a.appName||a.id).toLowerCase().includes(q.toLowerCase()));
+  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:20px">No apps</p>'; return; }
+  document.getElementById('apps-list').innerHTML = '<table><tbody>' + filtered.map(app => {
+    return `<tr><td><b>${app.appName||app.id}</b></td>
+    <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
+  }).join('') + '</tbody></table>';
+}
+async function toggleApp(appId, blocked) {
+  try { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').doc(appId).update({ blocked }); } catch(e){}
+}
+
+async function loadFilter() { loadBlockedDomains(); }
+async function loadBlockedDomains() {
+  if (!currentChildId) return;
+  const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').get();
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">🚫 ${d.id} <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p>No blocked domains</p>';
+}
+async function blockDomain() {
+  const domain = document.getElementById('new-domain').value.trim().toLowerCase();
+  if (!domain || !currentChildId) return;
+  await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').doc(domain).set({ active: true });
+  document.getElementById('new-domain').value = ''; loadBlockedDomains();
+}
+async function unblockDomain(domain) { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').doc(domain).delete(); loadBlockedDomains(); }
+
+function openTimeLimitModal() { document.getElementById('modal-time-limit').classList.add('open'); }
+function closeTimeLimitModal() { document.getElementById('modal-time-limit').classList.remove('open'); }
+async function saveTimeLimits() { closeTimeLimitModal(); }
+function loadScreenTimeSection() {}
+
+function loadLocation() {
+  if (!currentChildId) return;
+  if (locationUnsubscribe) locationUnsubscribe();
+  locationUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).onSnapshot(doc => {
+    const data = doc.data() || {};
+    if (data.location && data.location.lat) {
+      document.getElementById('location-coords').textContent = `${data.location.lat}, ${data.location.lng}`;
+      document.getElementById('map-area').style.display = 'none';
+      const mapFrame = document.getElementById('map-iframe');
+      mapFrame.style.display = 'block';
+      mapFrame.src = `https://www.openstreetmap.org/export/embed.html?bbox=${data.location.lng-0.005}%2C${data.location.lat-0.005}%2C${data.location.lng+0.005}%2C${data.location.lat+0.005}&layer=mapnik&marker=${data.location.lat}%2C${data.location.lng}`;
+    }
+  });
+}
+
+async function loadAlerts() {
+  if (!currentChildId) return;
+  const filterVal = document.getElementById('alert-filter').value;
+  let query = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('alerts').orderBy('timestamp', 'desc').limit(30);
+  if(filterVal) query = query.where('type', '==', filterVal);
+  const snap = await query.get();
+  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td>${d.data().type}</td><td>${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:20px">No alerts</p>';
+}
 </script>
 </body>
 </html>
