@@ -362,7 +362,7 @@
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">&#9209; Stop</button>
         </div>
                 <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Ã°Å¸â€Å  Turn Audio ON</button>
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ…Â  Turn Audio ON</button>
           <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
              <p style="color:var(--muted)">Select a feature above to start monitoring</p>
           </div>
@@ -495,6 +495,7 @@ let locationUnsubscribe = null;
 let statsUnsubscribe = null;
 let pairingUnsubscribe = null;
 let currentLiveMode = null;
+let liveTimeout = null;
 let statsInterval = null;
 let socket = null; // Socket.io variable
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
@@ -513,7 +514,7 @@ auth.onAuthStateChanged(user => {
     if (!socket) {
       socket = io(BACKEND_URL);
       socket.on('connect', () => {
-        console.log('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Web Admin connected to Socket.io');
+        console.log('ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ Web Admin connected to Socket.io');
         socket.emit('join_room', { parentId: user.uid });
       });
       
@@ -522,6 +523,7 @@ auth.onAuthStateChanged(user => {
         if (data.childId === currentChildId && (data.type === currentLiveMode || (currentLiveMode === 'screen' && data.type === 'screen'))) {
           const streamContent = document.getElementById('stream-content');
   document.getElementById('audio-toggle-btn').style.display = 'block';
+          if(liveTimeout) clearTimeout(liveTimeout);
           streamContent.innerHTML = '<img src="data:image/jpeg;base64,' + data.frameBase64 + '" style="max-width:100%;height:100%;object-fit:contain;border-radius:12px" />';
           const statusEl = document.getElementById('status-' + currentLiveMode);
           if (statusEl) { statusEl.textContent = 'Live'; statusEl.className = 'live-status on'; }
@@ -606,11 +608,11 @@ function toggleAudioStream() {
   const btn = document.getElementById('audio-toggle-btn');
   
   if (isAudioActive) {
-    btn.textContent = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ…Â  Mute Audio';
+    btn.textContent = 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã‚Â  Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'live_audio' });
   } else {
-    btn.textContent = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â¡ Turn Audio ON';
+    btn.textContent = 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -657,6 +659,17 @@ function toggleLive(mode) {
   streamContent.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto 16px"></div><p style="color:var(--muted)">Connecting via WebSockets...</p><p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open</p></div>';
 
   // Send Command to Child App
+    // START ERROR TIMEOUT
+  if(liveTimeout) clearTimeout(liveTimeout);
+  liveTimeout = setTimeout(() => {
+      const el = document.getElementById('stream-content');
+      if(el && el.innerHTML.includes('spinner')) {
+          el.innerHTML = '<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);"><span style="font-size:30px;">⚠️</span><br/><br/><b style="font-size:16px;">Connection Timeout Error</b><br/><br/><div style="text-align:left; font-size:13px; color:#fca5a5;"><b>Why is this happening?</b><br/>1. The KidShield app is closed or killed by Android Battery Saver.<br/>2. Internet is OFF on the child phone.<br/>3. Accessibility or Camera permissions are missing/denied.<br/><br/><b>Fix:</b> Open the app on child phone, check permissions, and try again.</div></div>';
+          const statusEl = document.getElementById('status-' + currentLiveMode);
+          if(statusEl) { statusEl.textContent = 'Connection Failed'; statusEl.className = 'live-status'; }
+      }
+  }, 15000); // 15 seconds timeout
+
   if (mode === 'screen') {
     sendCommand('REQUEST_SCREEN_PERMISSION');
     setTimeout(() => sendCommand('START_LIVE_VIEW', { intervalSeconds: 1 }), 2000);
@@ -808,7 +821,7 @@ function selectChild(childId, tabEl) {
   stopAllLive();
   loadChildData();
 
-  // 🔥 FORCE REFRESH CURRENT SECTION FOR NEW CHILD
+  // ðŸ”¥ FORCE REFRESH CURRENT SECTION FOR NEW CHILD
   const activeNav = document.querySelector(".nav-item.active");
   if (activeNav) {
       const sec = activeNav.id.replace("nav-", "");
@@ -882,7 +895,7 @@ async function loadActivity() {
         const typeIcon = d.type === 'web' ? '&#127760;' : d.type === 'app' ? '&#128241;' : '&#128203;';
         return '<tr><td style="color:var(--muted);font-size:12px">' + time + '</td><td>' + typeIcon + ' ' + (d.type || '--') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.details || '--') + '</td><td><span class="badge ' + (d.blocked ? 'badge-danger' : 'badge-success') + '">' + (d.blocked ? '&#128683; Blocked' : '&#9989; Allowed') + '</span></td></tr>';
       }).join('') + '</tbody></table>';
-  } catch (err) {}
+  } catch (err) { alert("Data Fetch Error: " + err.message); }
 }
 
 // ============================
@@ -916,7 +929,7 @@ async function loadApps() {
     const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').get();
     allApps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderApps(allApps);
-  } catch (err) {}
+  } catch (err) { alert("Data Fetch Error: " + err.message); }
 }
 
 function renderApps(apps) {
@@ -931,7 +944,7 @@ function renderApps(apps) {
 
 function filterApps(q) { renderApps(allApps.filter(a => (a.appName || a.id || '').toLowerCase().includes(q.toLowerCase()))); }
 async function toggleApp(appId, blocked) {
-  try { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').doc(appId).update({ blocked }); const app = allApps.find(a => a.id === appId); if (app) app.blocked = blocked; } catch (err) {}
+  try { await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('installed_apps').doc(appId).update({ blocked }); const app = allApps.find(a => a.id === appId); if (app) app.blocked = blocked; } catch (err) { alert("Data Fetch Error: " + err.message); }
 }
 
 const CATEGORIES = [
