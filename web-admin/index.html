@@ -473,35 +473,90 @@
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// KidShield Web Admin — Live Monitor FIXED JavaScript
-// index.html मधील <script> section मध्ये replace करा
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// KidShield Web Admin â€” Live Monitor FIXED JavaScript
+// index.html à¤®à¤§à¥€à¤² <script> section à¤®à¤§à¥à¤¯à¥‡ replace à¤•à¤°à¤¾
 //
 // BUGS FIXED:
 // 1. receive_frame type mismatch (camera_back vs camera_back)
-// 2. Audio socket listener — socket null असताना attach होत होता
-// 3. stopAllLive — STOP_LIVE_CAMERA missing for camera modes
-// 4. Connection timeout error message — encoding fixed
+// 2. Audio socket listener â€” socket null à¤…à¤¸à¤¤à¤¾à¤¨à¤¾ attach à¤¹à¥‹à¤¤ à¤¹à¥‹à¤¤à¤¾
+// 3. stopAllLive â€” STOP_LIVE_CAMERA missing for camera modes
+// 4. Connection timeout error message â€” encoding fixed
 // 5. Audio listener duplicate registration
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-// ── Global variables (existing code सोबत merge करा) ──
+// â”€â”€ Global variables (existing code à¤¸à¥‹à¤¬à¤¤ merge à¤•à¤°à¤¾) â”€â”€
 let currentParentId = null;
 let currentChildId = null;
 let currentLiveMode = null;
 let liveTimeout = null;
 let socket = null;
+async function sendCommand(command, data = {}) {
+  if (!currentChildId || !currentParentId) return;
+  try {
+    // 1. Send the command to Firestore
+    const cmdRef = await db.collection('commands').add({
+      childId: currentChildId,
+      parentId: currentParentId,
+      command: command,
+      data: data,
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`Command sent: ${command}`, data);
+
+    // 2. 🔥 EXACT ERROR TRACKER (Live Listener) 🔥
+    const unsub = cmdRef.onSnapshot(doc => {
+       const cmdData = doc.data();
+       if (!cmdData) return;
+
+       if (cmdData.status === 'failed') {
+           const exactError = cmdData.error || "Unknown Technical Error";
+           
+           // A. Show Exact Error Alert Pop-up
+           alert("❌ APP ERROR [" + command + "]:\n\n" + exactError);
+
+           // B. Stop loading spinner and show exact error on screen
+           if(liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
+           const sContent = document.getElementById('stream-content');
+           if(sContent) {
+               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);">
+                   <span style="font-size:30px;">⚠️</span><br/><br/>
+                   <b style="font-size:16px;">App Execution Error</b><br/><br/>
+                   <div style="text-align:left; font-size:13px; color:#fca5a5;">
+                       <b>Exact Error from Phone:</b><br/>${exactError}<br/><br/>
+                       <b>Action Required:</b> Open the app on the child phone, ensure all permissions are granted, and try again.
+                   </div>
+               </div>`;
+           }
+           
+           const statusEl = document.getElementById('status-' + currentLiveMode);
+           if(statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
+           
+           unsub(); // Stop listening after error
+       } else if (cmdData.status === 'executed') {
+           console.log(`Command ${command} executed successfully by phone!`);
+           unsub(); // Stop tracking once successful
+       }
+    });
+
+  } catch (err) {
+    alert("❌ Web Admin Error: " + err.message);
+  }
+}
+
 let isAudioActive = false;
-let audioListenerAttached = false; // BUG FIX #2: duplicate listener prevent करतो
+let audioListenerAttached = false; // BUG FIX #2: duplicate listener prevent à¤•à¤°à¤¤à¥‹
 
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
 const LIVE_TIMEOUT_MS = 15000; // 15 seconds timeout
 
-// ════════════════════════════════════════════════════════
-// SOCKET INIT — Auth नंतर call करा
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// SOCKET INIT â€” Auth à¤¨à¤‚à¤¤à¤° call à¤•à¤°à¤¾
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function initSocket(userId) {
-  if (socket && socket.connected) return; // आधीच connected
+  if (socket && socket.connected) return; // à¤†à¤§à¥€à¤š connected
 
   socket = io(BACKEND_URL, {
     transports: ['websocket', 'polling'], // WebSocket first, polling fallback
@@ -512,28 +567,28 @@ function initSocket(userId) {
   });
 
   socket.on('connect', () => {
-    console.log('✅ Web Admin connected to Socket.io:', socket.id);
+    console.log('âœ… Web Admin connected to Socket.io:', socket.id);
     socket.emit('join_room', { parentId: userId });
     document.getElementById('socket-status')?.setAttribute('data-connected', 'true');
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('❌ Socket disconnected:', reason);
+    console.log('âŒ Socket disconnected:', reason);
     document.getElementById('socket-status')?.setAttribute('data-connected', 'false');
-    // Auto reconnect होईल — manual नको
+    // Auto reconnect à¤¹à¥‹à¤ˆà¤² â€” manual à¤¨à¤•à¥‹
   });
 
   socket.on('connect_error', (err) => {
     console.log('Socket connect error:', err.message);
   });
 
-  // ── BUG FIX #1: receive_frame type check FIXED ──
-  // Problem: currentLiveMode = 'camera_back' पण data.type = 'camera_back' — check logic चुकीचा होता
+  // â”€â”€ BUG FIX #1: receive_frame type check FIXED â”€â”€
+  // Problem: currentLiveMode = 'camera_back' à¤ªà¤£ data.type = 'camera_back' â€” check logic à¤šà¥à¤•à¥€à¤šà¤¾ à¤¹à¥‹à¤¤à¤¾
   socket.on('receive_frame', (data) => {
     if (!currentLiveMode) return;
     if (data.childId !== currentChildId) return; // wrong child
 
-    // TYPE MATCHING — सगळे cases handle
+    // TYPE MATCHING â€” à¤¸à¤—à¤³à¥‡ cases handle
     const typeMatch =
       (currentLiveMode === 'screen'       && data.type === 'screen') ||
       (currentLiveMode === 'camera_back'  && data.type === 'camera_back') ||
@@ -541,7 +596,7 @@ function initSocket(userId) {
 
     if (!typeMatch) return;
 
-    // Frame मिळाला — timeout clear करा
+    // Frame à¤®à¤¿à¤³à¤¾à¤²à¤¾ â€” timeout clear à¤•à¤°à¤¾
     if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
 
     const streamContent = document.getElementById('stream-content');
@@ -558,20 +613,20 @@ function initSocket(userId) {
     // Status update
     const statusEl = document.getElementById('status-' + currentLiveMode);
     if (statusEl) {
-      statusEl.textContent = 'Live ●';
+      statusEl.textContent = 'Live â—';
       statusEl.className = 'live-status on';
     }
 
-    // Audio button दाखवा
+    // Audio button à¤¦à¤¾à¤–à¤µà¤¾
     document.getElementById('audio-toggle-btn').style.display = 'block';
   });
 
-  // ── BUG FIX #2: Audio listener — socket init नंतर DIRECTLY attach ──
-  // Problem: setTimeout(2000) मध्ये socket अजून null असायचा
+  // â”€â”€ BUG FIX #2: Audio listener â€” socket init à¤¨à¤‚à¤¤à¤° DIRECTLY attach â”€â”€
+  // Problem: setTimeout(2000) à¤®à¤§à¥à¤¯à¥‡ socket à¤…à¤œà¥‚à¤¨ null à¤…à¤¸à¤¾à¤¯à¤šà¤¾
   attachAudioListener();
 }
 
-// ── BUG FIX #2: Separate function — एकदाच attach होतो ──
+// â”€â”€ BUG FIX #2: Separate function â€” à¤à¤•à¤¦à¤¾à¤š attach à¤¹à¥‹à¤¤à¥‹ â”€â”€
 function attachAudioListener() {
   if (audioListenerAttached || !socket) return;
   audioListenerAttached = true;
@@ -582,12 +637,12 @@ function attachAudioListener() {
     if (!data.audioBase64) return;
 
     try {
-      // WAV audio play करा
+      // WAV audio play à¤•à¤°à¤¾
       const audioSrc = 'data:audio/wav;base64,' + data.audioBase64;
       const audio = new Audio(audioSrc);
       audio.volume = 1.0;
       audio.play().catch(e => {
-        // Autoplay blocked — user interaction नंतर retry
+        // Autoplay blocked â€” user interaction à¤¨à¤‚à¤¤à¤° retry
         console.log('Audio autoplay blocked:', e.message);
       });
     } catch (e) {
@@ -596,22 +651,22 @@ function attachAudioListener() {
   });
 }
 
-// ════════════════════════════════════════════════════════
-// TOGGLE LIVE — BUG FIX #3, #4
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// TOGGLE LIVE â€” BUG FIX #3, #4
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function toggleLive(mode) {
   if (!currentChildId) {
     alert('Please select a child first');
     return;
   }
 
-  // Same mode click → stop
+  // Same mode click â†’ stop
   if (currentLiveMode === mode) {
     stopAllLive();
     return;
   }
 
-  // आधीचे बंद करा
+  // à¤†à¤§à¥€à¤šà¥‡ à¤¬à¤‚à¤¦ à¤•à¤°à¤¾
   stopAllLive();
 
   currentLiveMode = mode;
@@ -622,11 +677,11 @@ function toggleLive(mode) {
   document.getElementById('btn-stop-live').style.display = 'block';
 
   const titles = {
-    screen:        '🖥️ Screen Mirror — Live',
-    camera_back:   '📷 Back Camera — Live',
-    camera_front:  '🤳 Front Camera — Live',
+    screen:        'ðŸ–¥ï¸ Screen Mirror â€” Live',
+    camera_back:   'ðŸ“· Back Camera â€” Live',
+    camera_front:  'ðŸ¤³ Front Camera â€” Live',
   };
-  document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
+  document.getElementById('live-section-title').innerHTML = titles[mode] || 'ðŸ“¹ Live Feed';
 
   const streamContent = document.getElementById('stream-content');
   streamContent.innerHTML = `
@@ -636,10 +691,10 @@ function toggleLive(mode) {
       <p style="color:var(--muted);font-size:12px;margin-top:8px">Ensure child app is open & running</p>
     </div>`;
 
-  // Audio button hide (frame येईल तेव्हा दाखवू)
+  // Audio button hide (frame à¤¯à¥‡à¤ˆà¤² à¤¤à¥‡à¤µà¥à¤¹à¤¾ à¤¦à¤¾à¤–à¤µà¥‚)
   document.getElementById('audio-toggle-btn').style.display = 'none';
 
-  // ── BUG FIX #4: Connection Timeout — clean error message ──
+  // â”€â”€ BUG FIX #4: Connection Timeout â€” clean error message â”€â”€
   if (liveTimeout) clearTimeout(liveTimeout);
   liveTimeout = setTimeout(() => {
     if (!currentLiveMode) return;
@@ -647,7 +702,7 @@ function toggleLive(mode) {
     if (streamContent) {
       streamContent.innerHTML = `
         <div style="text-align:center;padding:40px;color:#ef4444;">
-          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <div style="font-size:48px;margin-bottom:16px">âš ï¸</div>
           <div style="font-size:18px;font-weight:700;margin-bottom:12px">Connection Timeout</div>
           <div style="font-size:13px;color:#fca5a5;line-height:1.8;max-width:320px;margin:0 auto">
             <strong>Why is this happening?</strong><br>
@@ -660,7 +715,7 @@ function toggleLive(mode) {
             <strong>Fix:</strong> Open KidShield app on child phone, check permissions, then try again.
           </div>
           <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">
-            🔄 Retry
+            ðŸ”„ Retry
           </button>
         </div>`;
     }
@@ -669,7 +724,7 @@ function toggleLive(mode) {
     if (statusEl) { statusEl.textContent = 'Connection Failed'; statusEl.className = 'live-status'; }
   }, LIVE_TIMEOUT_MS);
 
-  // Firestore command पाठवा
+  // Firestore command à¤ªà¤¾à¤ à¤µà¤¾
   if (mode === 'screen') {
     sendCommand('START_LIVE_VIEW', { intervalSeconds: 1 });
   } else if (mode === 'camera_back') {
@@ -679,21 +734,21 @@ function toggleLive(mode) {
   }
 }
 
-// ════════════════════════════════════════════════════════
-// STOP ALL LIVE — BUG FIX #3
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// STOP ALL LIVE â€” BUG FIX #3
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function stopAllLive() {
   // Timeout clear
   if (liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
 
-  // ── BUG FIX #3: सगळ्या modes साठी stop command पाठवा ──
+  // â”€â”€ BUG FIX #3: à¤¸à¤—à¤³à¥à¤¯à¤¾ modes à¤¸à¤¾à¤ à¥€ stop command à¤ªà¤¾à¤ à¤µà¤¾ â”€â”€
   if (currentLiveMode === 'screen') {
     sendCommand('STOP_LIVE_VIEW');
   } else if (currentLiveMode === 'camera_back' || currentLiveMode === 'camera_front') {
     sendCommand('STOP_LIVE_CAMERA');
   }
 
-  // Audio पण बंद करा
+  // Audio à¤ªà¤£ à¤¬à¤‚à¤¦ à¤•à¤°à¤¾
   if (isAudioActive) {
     sendCommand('STOP_AUDIO_CAPTURE');
     isAudioActive = false;
@@ -717,19 +772,19 @@ function stopAllLive() {
   if (streamContent) {
     streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
   }
-  document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
+  document.getElementById('live-section-title').innerHTML = 'ðŸ“¹ Live Feed';
 }
 
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TOGGLE AUDIO
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function toggleAudioStream() {
   if (!currentChildId || !currentLiveMode) return;
   isAudioActive = !isAudioActive;
 
   const btn = document.getElementById('audio-toggle-btn');
   if (isAudioActive) {
-    btn.textContent = '🔇 Mute Audio';
+    btn.textContent = 'ðŸ”‡ Mute Audio';
     btn.classList.remove('btn-primary');
     btn.classList.add('btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'audio_' + Date.now() });
@@ -741,10 +796,10 @@ function toggleAudioStream() {
   }
 }
 
-// ════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SEND COMMAND TO CHILD (Firestore)
-// ════════════════════════════════════════════════════════
-async function sendCommand(command, data = {}) {
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function disabled_sendCommand(command, data = {}) {
   if (!currentChildId || !currentParentId) {
     console.log('sendCommand: No child/parent selected');
     return;
@@ -764,10 +819,10 @@ async function sendCommand(command, data = {}) {
   }
 }
 
-// ════════════════════════════════════════════════════════
-// AUTH STATE — Socket init येथे trigger करा
-// ════════════════════════════════════════════════════════
-// तुमच्या existing auth.onAuthStateChanged मध्ये हे replace करा:
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// AUTH STATE â€” Socket init à¤¯à¥‡à¤¥à¥‡ trigger à¤•à¤°à¤¾
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// à¤¤à¥à¤®à¤šà¥à¤¯à¤¾ existing auth.onAuthStateChanged à¤®à¤§à¥à¤¯à¥‡ à¤¹à¥‡ replace à¤•à¤°à¤¾:
 /*
 auth.onAuthStateChanged(user => {
   if (user) {
@@ -776,7 +831,7 @@ auth.onAuthStateChanged(user => {
     document.getElementById('app').style.display = 'block';
     document.getElementById('parent-email-display').textContent = user.email;
 
-    // ✅ FIXED: initSocket function call करा
+    // âœ… FIXED: initSocket function call à¤•à¤°à¤¾
     initSocket(user.uid);
 
     loadChildren();
