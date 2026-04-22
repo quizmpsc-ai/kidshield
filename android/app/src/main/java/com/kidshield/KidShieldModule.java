@@ -1,4 +1,5 @@
 package com.kidshield;
+
 import java.util.List;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
@@ -14,7 +15,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
-import org.json.JSONArray;
+import android.os.PowerManager;
 
 public class KidShieldModule extends ReactContextBaseJavaModule {
     private static final String PREFS = "KidShieldPrefs";
@@ -27,6 +28,29 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
 
     @Override
     public String getName() { return "KidShieldModule"; }
+
+    // 🔥 FIX: ॲपला बॅकग्राउंडमधून समोर (Foreground) आणण्यासाठी WakeLock
+    @ReactMethod
+    public void wakeApp(Promise promise) {
+        try {
+            PowerManager pm = (PowerManager) reactContext.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
+                    "KidShield:WakeLock"
+                );
+                wl.acquire(3000); 
+            }
+
+            Intent intent = new Intent(reactContext, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            reactContext.startActivity(intent);
+            
+            promise.resolve("woken");
+        } catch (Exception e) { 
+            promise.reject("ERROR", e.getMessage()); 
+        }
+    }
 
     @ReactMethod
     public void hideAppIcon(Promise promise) {
@@ -113,7 +137,6 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
             WritableArray appList = Arguments.createArray();
             
             for (ApplicationInfo packageInfo : packages) {
-                // Only get apps that can be launched (hides background system apps)
                 if (pm.getLaunchIntentForPackage(packageInfo.packageName) != null) {
                     WritableMap app = Arguments.createMap();
                     app.putString("packageName", packageInfo.packageName);

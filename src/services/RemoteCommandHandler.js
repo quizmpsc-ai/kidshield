@@ -1,18 +1,9 @@
-// src/services/RemoteCommandHandler.js Ã¢â‚¬â€ FIXED VERSION
-//
-// BUGS FIXED:
-// 1. childId field: data.childId Ã¢â€ â€™ user.uid (Firestore doc Ã Â¤Â®Ã Â¤Â§Ã Â¥ÂÃ Â¤Â¯Ã Â¥â€¡ childId field Ã Â¤Â¨Ã Â¤Â¸Ã Â¤Â¤Ã Â¥â€¹)
-// 2. Socket reconnection logic added
-// 3. NativeEventEmitter Ã¢â‚¬â€ module specify Ã Â¤â€¢Ã Â¥â€¡Ã Â¤Â²Ã Â¤Â¾ (warning fix)
-// 4. LOCK_DEVICE garbled string fixed
-// 5. ScreenMirror requestPermission Ã¢â‚¬â€ UI thread Ã Â¤ÂµÃ Â¤Â° run Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â£Ã Â¥â€¡ Ã Â¤â€”Ã Â¤Â°Ã Â¤Å“Ã Â¥â€¡Ã Â¤Å¡Ã Â¥â€¡
-
-import { NativeModules, NativeEventEmitter } from 'react-native';
+import { NativeModules, NativeEventEmitter, AppState } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import io from 'socket.io-client';
 
-const { RemoteCamera, AmbientAudio, ScreenMirror } = NativeModules;
+const { RemoteCamera, AmbientAudio, ScreenMirror, KidShieldModule } = NativeModules;
 const SOCKET_SERVER_URL = 'https://kidshield-0757.onrender.com';
 
 class RemoteCommandHandler {
@@ -25,16 +16,18 @@ class RemoteCommandHandler {
     this.screenListener = null;
     this.cameraListener = null;
     this.audioListener = null;
-    this.processingCommands = new Set(); // duplicate execution prevent
+    this.processingCommands = new Set();
+    this.pingInterval = null;
   }
 
   async init() {
+    if (this.isInitialized) return;
+
     try {
       const user = auth().currentUser;
-      if (!user) { console.log('RemoteCommand: No user'); return; }
-
+      if (!user) return;
       const doc = await firestore().collection('users').doc(user.uid).get();
-      if (!doc.exists) { console.log('RemoteCommand: User doc missing'); return; }
+      if (!doc.exists) return;
 
       const data = doc.data();       
       this.parentId = data?.parentId || null;
@@ -43,114 +36,98 @@ class RemoteCommandHandler {
       if (this.parentId) {
           try {
               const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
-              if (!childSnap.empty) {
-                  correctChildId = childSnap.docs[0].id;
-                  await firestore().collection('users').doc(user.uid).update({ childId: correctChildId }).catch(()=>{});
-              }
-          } catch(e) { console.log("AutoHeal Error:", e); }
+              if (!childSnap.empty) correctChildId = childSnap.docs[0].id;
+          } catch(e) {}
       }
       this.childId = correctChildId;
+      if (!this.parentId) return;
 
-      console.log(`RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
-
-      if (!this.parentId) {
-        console.log('RemoteCommand: No parent linked yet Ã¢â‚¬â€ skipping');
-        return;
-      }
-
-      // Ã¢â€â‚¬Ã¢â€â‚¬ SOCKET CONNECT Ã¢â€â‚¬Ã¢â€â‚¬
       this._connectSocket();
-
-      // Ã¢â€â‚¬Ã¢â€â‚¬ NATIVE EVENT LISTENERS Ã¢â€â‚¬Ã¢â€â‚¬
       this._attachNativeListeners();
 
-      // Ã¢â€â‚¬Ã¢â€â‚¬ SET NATIVE INFO Ã¢â€â‚¬Ã¢â€â‚¬
-      if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId).catch(() => {});
-      if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId).catch(() => {});
-      if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId).catch(() => {});
+      // 🔥 CRITICAL FIX: Safe Checks Added to prevent "is not a function" error
+      try { if (RemoteCamera && typeof RemoteCamera.setChildInfo === 'function') await RemoteCamera.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (AmbientAudio && typeof AmbientAudio.setChildInfo === 'function') await AmbientAudio.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (ScreenMirror && typeof ScreenMirror.setChildInfo === 'function') await ScreenMirror.setChildInfo(this.childId, this.parentId); } catch(e){}
 
-      // Ã¢â€â‚¬Ã¢â€â‚¬ FIRESTORE COMMAND LISTENER Ã¢â€â‚¬Ã¢â€â‚¬
       this._attachCommandListener();
-
+      
+      AppState.addEventListener('change', this._handleAppStateChange.bind(this));
       this.isInitialized = true;
-      console.log('Ã¢Å“â€¦ RemoteCommandHandler Ready!');
-
+      console.log('✅ RemoteCommandHandler Ready!');
     } catch (err) {
-      console.log('Ã¢ÂÅ’ RemoteCommand Init Error:', err);
+      console.log('❌ RemoteCommand Init Error:', err);
     }
   }
 
-_connectSocket() {
-    if (this.socket?.connected) return;
+  _handleAppStateChange(nextAppState) {
+    if (nextAppState === 'active') {
+       if (!this.socket?.connected) this._connectSocket();
+    }
+  }
 
-    this.socket = io(SOCKET_SERVER_URL, {
-      transports: ['websocket'], // <--- फक्त 'websocket' ठेवले
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 3000,
+  _connectSocket() {
+    if (this.socket?.connected) return;
+    
+    console.log("Attempting Socket Connection...");
+    this.socket = io(SOCKET_SERVER_URL, { 
+        transports: ['websocket'], 
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        pingTimeout: 60000, 
+        pingInterval: 25000  
     });
 
-    this.socket.on('connect', () => {
-      console.log('Ã¢Å“â€¦ Child Socket Connected:', this.socket.id);
-      this.socket.emit('join_room', { parentId: this.parentId });
+    this.socket.on('connect', () => { 
+        console.log("Socket Connected!", this.socket.id);
+        this.socket.emit('join_room', { parentId: this.parentId }); 
+        
+        if(this.pingInterval) clearInterval(this.pingInterval);
+        this.pingInterval = setInterval(() => {
+            if(this.socket && this.socket.connected) {
+                this.socket.emit('ping', { childId: this.childId });
+            }
+        }, 20000);
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
-    });
-
-    this.socket.on('connect_error', (err) => {
-      console.log('Socket error:', err.message);
+        console.log("Socket Disconnected:", reason);
+        if(this.pingInterval) clearInterval(this.pingInterval);
+        if (reason === 'io server disconnect' || reason === 'transport close') {
+            setTimeout(() => this.socket.connect(), 2000);
+        }
     });
   }
 
   _attachNativeListeners() {
-    // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: NativeEventEmitter Ã Â¤Â²Ã Â¤Â¾ module pass Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â¾ Ã¢â€â‚¬Ã¢â€â‚¬
-    // Problem: NativeEventEmitter() without module Ã¢â€ â€™ Yellow warning
     const screenEmitter = ScreenMirror ? new NativeEventEmitter(ScreenMirror) : null;
     const cameraEmitter = RemoteCamera ? new NativeEventEmitter(RemoteCamera) : null;
     const audioEmitter  = AmbientAudio ? new NativeEventEmitter(AmbientAudio)  : null;
 
-    // Screen frames
     if (this.screenListener) this.screenListener.remove();
     if (screenEmitter) {
       this.screenListener = screenEmitter.addListener('onScreenFrame', (base64Frame) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_frame', {
-            parentId: this.parentId,
-            childId: this.childId,
-            frameBase64: base64Frame,
-            type: 'screen',
-          });
+          this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: base64Frame, type: 'screen' });
         }
       });
     }
 
-    // Camera frames
     if (this.cameraListener) this.cameraListener.remove();
     if (cameraEmitter) {
       this.cameraListener = cameraEmitter.addListener('onCameraFrame', (event) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_frame', {
-            parentId: this.parentId,
-            childId: this.childId,
-            frameBase64: event.frame,
-            type: event.type, // 'camera_back' or 'camera_front'
-          });
+          this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: event.frame, type: event.type });
         }
       });
     }
 
-    // Audio frames
     if (this.audioListener) this.audioListener.remove();
     if (audioEmitter) {
       this.audioListener = audioEmitter.addListener('onAudioFrame', (base64Audio) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_audio', {
-            parentId: this.parentId,
-            childId: this.childId,
-            audioBase64: base64Audio,
-          });
+          this.socket.emit('stream_audio', { parentId: this.parentId, childId: this.childId, audioBase64: base64Audio });
         }
       });
     }
@@ -158,140 +135,101 @@ _connectSocket() {
 
   _attachCommandListener() {
     if (this.unsubscribe) this.unsubscribe();
-
-    console.log('Attaching command listener for childId:', this.childId);
-
-    this.unsubscribe = firestore()
-      .collection('commands')
-      .where('childId', '==', this.childId)
-      .where('status', '==', 'pending')
-      .onSnapshot(
-        snap => {
-          console.log(`Commands received: ${snap.docs.length}`);
+    this.unsubscribe = firestore().collection('commands')
+      .where('childId', '==', this.childId).where('status', '==', 'pending')
+      .onSnapshot(snap => {
           snap.docs.forEach(doc => {
             const cmdId = doc.id;
-            // Ã¢â€â‚¬Ã¢â€â‚¬ Duplicate execution prevent Ã¢â€â‚¬Ã¢â€â‚¬
             if (this.processingCommands.has(cmdId)) return;
             this.processingCommands.add(cmdId);
             this.handleCommand(cmdId, doc.data());
           });
-        },
-        error => {
-          console.log('Command listener error:', error.code, error.message);
-        }
-      );
+      });
   }
 
   async handleCommand(commandId, commandData) {
     const { command, data = {} } = commandData;
-    console.log('Executing command:', command, data);
-
+    console.log("Received Command:", command);
     try {
-      // Status Ã¢â€ â€™ processing
       await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
 
-      switch (command) {
+      // 🔥 ॲपला वर आणण्याची खात्री करा (Wake up App)
+      if (['START_LIVE_CAMERA', 'START_LIVE_VIEW', 'START_AUDIO_CAPTURE'].includes(command)) {
+         if (KidShieldModule && KidShieldModule.wakeApp) {
+             console.log("Waking up app over lock screen...");
+             await KidShieldModule.wakeApp().catch(()=>{});
+             // App समोर येण्यासाठी 3 seconds वेळ द्या
+             await new Promise(resolve => setTimeout(resolve, 3000)); 
+         }
+      }
 
+      switch (command) {
         case 'START_LIVE_CAMERA':
-          if (RemoteCamera) {
-            await RemoteCamera.startLiveCamera(
-              data.useFront === true,
-              data.intervalSeconds || 1
-            );
+          if (RemoteCamera) await RemoteCamera.startLiveCamera(data.useFront === true, data.intervalSeconds || 1);
+          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+             await AmbientAudio.startAmbientCapture('camera_audio').catch(()=>{});
           }
           break;
-
+          
         case 'STOP_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.stopLiveCamera();
-          break;
-
-        case 'START_AUDIO_CAPTURE':
-          if (AmbientAudio) {
-            await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture().catch(()=>{});
           }
           break;
-
-        case 'STOP_AUDIO_CAPTURE':
-          if (AmbientAudio) await AmbientAudio.stopAmbientCapture();
+          
+        case 'START_AUDIO_CAPTURE':
+          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+             await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          }
           break;
-
+          
+        case 'STOP_AUDIO_CAPTURE':
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture();
+          }
+          break;
+          
         case 'START_LIVE_VIEW':
-          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Screen Mirror permission UI thread Ã Â¤ÂµÃ Â¤Â° Ã¢â€â‚¬Ã¢â€â‚¬
           if (ScreenMirror) {
-            try {
-              await ScreenMirror.requestPermission();
-              await ScreenMirror.startLiveView(data.intervalSeconds || 1);
-            } catch (e) {
-              console.log('ScreenMirror error:', e.message);
-              // Permission denied Ã¢â€ â€™ status failed
-              await firestore().collection('commands').doc(commandId).update({
-                status: 'failed',
-                error: 'Screen permission denied: ' + e.message,
-              });
-              this.processingCommands.delete(commandId);
-              return;
+            await ScreenMirror.requestPermission();
+            await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+            if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+               await AmbientAudio.startAmbientCapture('screen_audio').catch(()=>{});
             }
           }
           break;
-
+          
         case 'STOP_LIVE_VIEW':
           if (ScreenMirror) await ScreenMirror.stopLiveView();
-          break;
-
-        case 'LOCK_DEVICE':
-          // Ã¢â€â‚¬Ã¢â€â‚¬ BUG FIX: Garbled string fixed Ã¢â€â‚¬Ã¢â€â‚¬
-          const { Alert } = require('react-native');
-          Alert.alert(
-            'Ã°Å¸â€â€™ Phone Locked',
-            'Parent has locked this device.',
-            [{ text: 'OK' }],
-            { cancelable: false }
-          );
-          break;
-
-        case 'UPDATE_RULES':
-          // App rules reload trigger
-          const { ChildMonitorService } = require('./ChildMonitorService');
-          if (ChildMonitorService?.loadAppRules) {
-            await ChildMonitorService.loadAppRules();
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture().catch(() => {});
           }
           break;
-
-        default:
-          console.log('Unknown command:', command);
+          
+        case 'LOCK_DEVICE':
+          const { Alert } = require('react-native');
+          Alert.alert('🔒 Phone Locked', 'Parent has locked this device.', [{ text: 'OK' }], { cancelable: false });
+          break;
       }
-
-      // Status Ã¢â€ â€™ executed
-      await firestore().collection('commands').doc(commandId).update({
-        status: 'executed',
-        executedAt: firestore.FieldValue.serverTimestamp(),
-      });
-
+      
+      await firestore().collection('commands').doc(commandId).update({ status: 'executed', executedAt: firestore.FieldValue.serverTimestamp() });
     } catch (error) {
-      console.log('Command error:', command, error.message);
-      await firestore().collection('commands').doc(commandId).update({
-        status: 'failed',
-        error: error.message,
-      }).catch(() => {});
+      console.log("Command Execution Failed:", error.message);
+      await firestore().collection('commands').doc(commandId).update({ status: 'failed', error: error.message }).catch(() => {});
     } finally {
-      // Processing set Ã Â¤Â®Ã Â¤Â§Ã Â¥â€šÃ Â¤Â¨ Ã Â¤â€¢Ã Â¤Â¾Ã Â¤Â¢Ã Â¤Â¾
       setTimeout(() => this.processingCommands.delete(commandId), 5000);
     }
   }
 
   destroy() {
     if (this.unsubscribe) this.unsubscribe();
-    if (this.screenListener) this.screenListener.remove();
-    if (this.cameraListener) this.cameraListener.remove();
-    if (this.audioListener) this.audioListener.remove();
-    if (this.socket) this.socket.disconnect();
-    if (RemoteCamera) RemoteCamera.stopLiveCamera().catch(() => {});
-    if (ScreenMirror) ScreenMirror.stopLiveView().catch(() => {});
-    if (AmbientAudio) AmbientAudio.stopAmbientCapture().catch(() => {});
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+    }
     this.isInitialized = false;
-    this.processingCommands.clear();
-    console.log('RemoteCommandHandler destroyed');
   }
 }
-
 export default new RemoteCommandHandler();
