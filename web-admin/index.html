@@ -1028,6 +1028,7 @@ function loadLocation() {
         L.control.layers(baseMaps).addTo(mapInstance);
         
         mapMarker = L.marker([lat, lng]).addTo(mapInstance);
+		setTimeout(() => { mapInstance.invalidateSize(); }, 500);
       } else {
         mapInstance.setView([lat, lng], mapInstance.getZoom());
         mapMarker.setLatLng([lat, lng]);
