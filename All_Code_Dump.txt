@@ -154,6 +154,7 @@ AppRegistry.registerComponent(appName, () => App);
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+	<uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
 
@@ -265,15 +266,21 @@ AppRegistry.registerComponent(appName, () => App);
 
 package com.kidshield;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioPlaybackCaptureConfiguration;
 import android.media.AudioRecord;
+import android.media.MediaRecorder;
 import android.media.projection.MediaProjection;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Base64;
+
+import androidx.core.app.ActivityCompat;
+
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.io.*;
@@ -292,46 +299,58 @@ public class AmbientAudioModule extends ReactContextBaseJavaModule {
 
     @Override public String getName() { return "AmbientAudio"; }
 
+    // 🔥 FIX: Required by React Native Event Emitter
+    @ReactMethod public void addListener(String eventName) {}
+    @ReactMethod public void removeListeners(double count) {}
+    @ReactMethod public void setChildInfo(String cId, String pId, Promise promise) { promise.resolve(true); }
+
     @ReactMethod
     public void startAmbientCapture(String requestId, Promise promise) {
         if (isRecording) { promise.resolve(true); return; }
 
-        // 🔥 Android 10 (Q) पेक्षा जुन्या फोनवर हे चालणार नाही
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            promise.reject("UNSUPPORTED", "Internal audio needs Android 10+");
+        if (ActivityCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            promise.reject("NO_PERMISSION", "Microphone permission is required");
             return;
         }
 
-        // 🔥 Screen Mirror कडून परवानगी मिळाली आहे का चेक करा
-        MediaProjection projection = ScreenMirrorModule.mediaProjection; 
-        if (projection == null) {
-            promise.reject("NO_PROJECTION", "Please start Screen Mirror first to hear internal audio");
-            return;
-        }
-
-        recordThread = new HandlerThread("InternalAudioThread");
+        recordThread = new HandlerThread("AudioCaptureThread");
         recordThread.start();
+        
         new Handler(recordThread.getLooper()).post(() -> {
             try {
-                // 🔥 Internal Audio Capture Config
-                AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(projection)
-                        .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                        .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                        .build();
-
-                AudioFormat audioFormat = new AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(SAMPLE_RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                        .build();
-
                 int bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
                 
-                audioRecord = new AudioRecord.Builder()
-                        .setAudioFormat(audioFormat)
-                        .setBufferSizeInBytes(bufferSize * 4)
-                        .setAudioPlaybackCaptureConfig(config)
-                        .build();
+                // 🔥 Logic: Screen Audio (Internal) VS Camera Audio (Mic)
+                if (requestId.equals("screen_audio") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaProjection projection = ScreenMirrorModule.mediaProjection;
+                    if (projection != null) {
+                        AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(projection)
+                                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                                .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                                .build();
+
+                        AudioFormat audioFormat = new AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(SAMPLE_RATE)
+                                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                                .build();
+
+                        audioRecord = new AudioRecord.Builder()
+                                .setAudioFormat(audioFormat)
+                                .setBufferSizeInBytes(bufferSize * 4)
+                                .setAudioPlaybackCaptureConfig(config)
+                                .build();
+                    } else {
+                        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize * 4);
+                    }
+                } else {
+                    audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize * 4);
+                }
+
+                if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                    promise.reject("INIT_FAILED", "Failed to initialize AudioRecord");
+                    return;
+                }
 
                 audioRecord.startRecording();
                 isRecording = true;
@@ -1681,6 +1700,7 @@ public class KidShieldDeviceAdminReceiver extends DeviceAdminReceiver {
 ================================================
 
 package com.kidshield;
+
 import java.util.List;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
@@ -1696,7 +1716,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
-import org.json.JSONArray;
+import android.os.PowerManager;
 
 public class KidShieldModule extends ReactContextBaseJavaModule {
     private static final String PREFS = "KidShieldPrefs";
@@ -1709,6 +1729,29 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
 
     @Override
     public String getName() { return "KidShieldModule"; }
+
+    // 🔥 FIX: ॲपला बॅकग्राउंडमधून समोर (Foreground) आणण्यासाठी WakeLock
+    @ReactMethod
+    public void wakeApp(Promise promise) {
+        try {
+            PowerManager pm = (PowerManager) reactContext.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
+                    "KidShield:WakeLock"
+                );
+                wl.acquire(3000); 
+            }
+
+            Intent intent = new Intent(reactContext, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            reactContext.startActivity(intent);
+            
+            promise.resolve("woken");
+        } catch (Exception e) { 
+            promise.reject("ERROR", e.getMessage()); 
+        }
+    }
 
     @ReactMethod
     public void hideAppIcon(Promise promise) {
@@ -1795,7 +1838,6 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
             WritableArray appList = Arguments.createArray();
             
             for (ApplicationInfo packageInfo : packages) {
-                // Only get apps that can be launched (hides background system apps)
                 if (pm.getLaunchIntentForPackage(packageInfo.packageName) != null) {
                     WritableMap app = Arguments.createMap();
                     app.putString("packageName", packageInfo.packageName);
@@ -2391,21 +2433,47 @@ public class LocationModule extends ReactContextBaseJavaModule {
 ================================================
 
 package com.kidshield;
+
+import android.os.Bundle;
+import android.os.Build;
+import android.view.WindowManager;
 import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactActivityDelegate;
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
 import com.facebook.react.defaults.DefaultReactActivityDelegate;
 
 public class MainActivity extends ReactActivity {
+
     @Override
-    protected String getMainComponentName() { return "KidShield"; }
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        
+        // 🔥 WAKE UP OVER LOCK SCREEN (लॉक स्क्रीनच्या वर ॲप आणणे)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
+        }
+    }
+
+    @Override
+    protected String getMainComponentName() {
+        return "KidShield";
+    }
+
     @Override
     protected ReactActivityDelegate createReactActivityDelegate() {
         return new DefaultReactActivityDelegate(
             this,
             getMainComponentName(),
-            DefaultNewArchitectureEntryPoint.getFabricEnabled()
-        );
+            DefaultNewArchitectureEntryPoint.getFabricEnabled());
     }
 }
 
@@ -4003,7 +4071,7 @@ const styles = StyleSheet.create({
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, AppState, PermissionsAndroid,
   ScrollView, Alert, Animated, Vibration, NativeModules,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
@@ -4012,11 +4080,9 @@ import Geolocation from '@react-native-community/geolocation';
 import ChildMonitorService from '../../services/ChildMonitorService';
 
 const API_URL = 'https://kidshield-0757.onrender.com';
-const { BatteryModule, AppHider, UsageStats } = NativeModules;
+const { BatteryModule, KidShieldModule, AppBlocker } = NativeModules;
 
 export default function ChildHome({ navigation }) {
-  const [screenTime, setScreenTime] = useState(0);
-  const [limit, setLimit] = useState(120);
   const [childName, setChildName] = useState('Child');
   const [parentId, setParentId] = useState(null);
   const [childDocId, setChildDocId] = useState(null);
@@ -4024,21 +4090,127 @@ export default function ChildHome({ navigation }) {
   const [location, setLocation] = useState(null);
   const [battery, setBattery] = useState(null);
   const [adminEnabled, setAdminEnabled] = useState(false);
+  
+  const [permsState, setPermsState] = useState({
+    location: false, camera: false, microphone: false, deviceAdmin: false, overlay: false
+  });
+
   const sosAnim = useRef(new Animated.Value(1)).current;
-  const screenTimeRef = useRef(0);
-  const blockedRef = useRef(0);
 
   useEffect(() => {
     loadChildData();
     startLocationTracking();
     startBatteryTracking();
-    startScreenTimeTracking();
-    
-    // 🔥 ही लाईन खूप महत्त्वाची आहे, याने Live Monitor आणि Sockets चालू होतात! 🔥
+    checkPermissionsStatus();
     ChildMonitorService.init(); 
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        checkPermissionsStatus();
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
-  // â”€â”€ Child data load à¤•à¤°à¤¾ â”€â”€
+  const checkPermissionsStatus = async () => {
+    const loc = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    const cam = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+    const mic = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    const admin = KidShieldModule ? await KidShieldModule.isDeviceAdminEnabled() : false;
+    const overlay = AppBlocker ? await AppBlocker.isOverlayPermissionGranted() : false;
+    
+    setPermsState({ location: loc, camera: cam, microphone: mic, deviceAdmin: admin, overlay });
+    setAdminEnabled(admin);
+  };
+
+  const requestSpecificPermission = async (type) => {
+    try {
+      if (type === 'location') {
+        Alert.alert(
+          "Location Tracking Setup",
+          "To track location accurately, we need background access.\n\nSteps:\n1. Tap 'Continue' below.\n2. When prompted, select 'While using the app'.\n3. If asked again, select 'Allow all the time'.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: async () => {
+                await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+                setTimeout(checkPermissionsStatus, 1500);
+            }}
+          ]
+        );
+      } else if (type === 'camera') {
+        Alert.alert(
+          "Remote Camera Setup",
+          "To enable remote photo capture, the app needs camera access.\n\nSteps:\n1. Tap 'Continue' below.\n2. When prompted, tap 'While using the app' or 'Allow'.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: async () => {
+                await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+                setTimeout(checkPermissionsStatus, 1500);
+            }}
+          ]
+        );
+      } else if (type === 'microphone') {
+        Alert.alert(
+          "Remote Audio Setup",
+          "To enable ambient audio listening, the app needs microphone access.\n\nSteps:\n1. Tap 'Continue' below.\n2. When prompted, tap 'While using the app' or 'Allow'.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Continue", onPress: async () => {
+                await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+                setTimeout(checkPermissionsStatus, 1500);
+            }}
+          ]
+        );
+      } else if (type === 'deviceAdmin') {
+        Alert.alert(
+          "Uninstall Protection",
+          "Enable Device Admin to prevent your child from deleting KidShield.\n\nSteps:\n1. Tap 'Open Settings' below.\n2. A security screen will appear.\n3. Scroll down and tap 'Activate this device admin app'.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: async () => {
+                if (KidShieldModule) await KidShieldModule.requestDeviceAdmin();
+                setTimeout(checkPermissionsStatus, 3000); 
+            }}
+          ]
+        );
+      } else if (type === 'overlay') {
+        Alert.alert(
+          "Background Execution",
+          "Allow KidShield to wake up and perform background tasks.\n\nSteps:\n1. Tap 'Open Settings'.\n2. Find 'KidShield' in the list.\n3. Turn ON 'Allow display over other apps'.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: async () => {
+                if (AppBlocker) await AppBlocker.requestOverlayPermission();
+                setTimeout(checkPermissionsStatus, 3000); 
+            }}
+          ]
+        );
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleHideApp = async () => {
+    Alert.alert(
+      "Hide Application",
+      "This will remove KidShield from the app drawer. You must dial *#1234# in the phone dialer to open it again.\n\nDo you want to proceed?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Hide Now", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (KidShieldModule) await KidShieldModule.hideAppIcon();
+              Alert.alert("Success", "App is now hidden.");
+            } catch (error) {
+              console.log("Error hiding app:", error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const loadChildData = async () => {
     try {
       const uid = auth().currentUser?.uid;
@@ -4046,7 +4218,7 @@ export default function ChildHome({ navigation }) {
       const doc = await firestore().collection('users').doc(uid).get();
       if (doc.exists) {
         const data = doc.data();
-                setChildName(data.name || 'Child');
+        setChildName(data.name || 'Child');
         setParentId(data.parentId || null);
         let correctId = data.childId;
         if (data.parentId) {
@@ -4056,20 +4228,10 @@ export default function ChildHome({ navigation }) {
             } catch(e){}
         }
         setChildDocId(correctId || null);
-        setLimit(data.screenTimeLimit || 120);
-        screenTimeRef.current = data.screenTime || 0;
-        setScreenTime(data.screenTime || 0);
-
-        // Admin check
-        if (AppHider) {
-          const isAdmin = await AppHider.isDeviceAdminActive();
-          setAdminEnabled(isAdmin);
-        }
       }
-    } catch (e) { console.error('Load error:', e); }
+    } catch (e) {}
   };
 
-  // â”€â”€ Battery tracking â”€â”€
   const startBatteryTracking = async () => {
     const updateBattery = async () => {
       try {
@@ -4081,183 +4243,26 @@ export default function ChildHome({ navigation }) {
       } catch (e) {}
       return null;
     };
-
-    // Immediately fetch
-    const level = await updateBattery();
-
-    // à¤¹à¤° 5 minutes update à¤•à¤°à¤¾
+    await updateBattery();
     setInterval(updateBattery, 5 * 60 * 1000);
-    return level;
   };
 
-  // â”€â”€ Screen time tracking â”€â”€
-  const startScreenTimeTracking = () => {
-    const interval = setInterval(async () => {
-      screenTimeRef.current += 1;
-      setScreenTime(screenTimeRef.current);
-
-      // à¤¹à¤° 5 minutes Firebase à¤²à¤¾ push à¤•à¤°à¤¾
-      if (screenTimeRef.current % 5 === 0) {
-        await pushDataToFirebase();
-      }
-    }, 60000); // 1 minute
-
-    // à¤ªà¤¹à¤¿à¤²à¥à¤¯à¤¾à¤‚à¤¦à¤¾ 30 seconds à¤¨à¤‚à¤¤à¤° push à¤•à¤°à¤¾
-    setTimeout(() => pushDataToFirebase(), 30000);
-
-    return () => clearInterval(interval);
-  };
-
-  // â”€â”€ à¤¸à¤—à¤³à¤¾ data Firebase families collection à¤®à¤§à¥à¤¯à¥‡ push à¤•à¤°à¤¾ â”€â”€
-  const pushDataToFirebase = async () => {
-    try {
-      const uid = auth().currentUser?.uid;
-      if (!uid || !parentId) return;
-
-      // Battery get à¤•à¤°à¤¾
-      let batteryLevel = battery;
-      if (BatteryModule && batteryLevel === null) {
-        batteryLevel = await BatteryModule.getBatteryLevel();
-        setBattery(batteryLevel);
-      }
-
-      // Usage stats (if available)
-      let usageApps = [];
-      try {
-        if (UsageStats) {
-          const hasPerms = await UsageStats.hasUsagePermission();
-          if (hasPerms) {
-            const usage = await UsageStats.getTodayUsage();
-            usageApps = usage.apps || [];
-          }
-        }
-      } catch (e) {}
-
-      const now = new Date();
-      const updateData = {
-        // Screen time
-        screenTime: screenTimeRef.current,
-        screenTimeMinutes: screenTimeRef.current,
-
-        // Battery â€” real device data
-        battery: batteryLevel !== null ? batteryLevel : null,
-        batteryLevel: batteryLevel !== null ? batteryLevel : null,
-
-        // Blocked attempts
-        blockedAttempts: blockedRef.current,
-
-        // Status
-        isOnline: true,
-        lastSeen: firestore.FieldValue.serverTimestamp(),
-        lastUpdated: firestore.FieldValue.serverTimestamp(),
-
-        // App usage
-        appsUsed: usageApps.length,
-        topApps: usageApps.slice(0, 5),
-      };
-
-      // 1. families/{parentId}/children/{childDocId} update à¤•à¤°à¤¾ (Web Admin à¤¸à¤¾à¤ à¥€)
-      if (childDocId) {
-        await firestore()
-          .collection('families')
-          .doc(parentId)
-          .collection('children')
-          .doc(childDocId)
-          .set(updateData, { merge: true });
-      }
-
-      // 2. users/{uid} à¤ªà¤£ update à¤•à¤°à¤¾ (Android app à¤¸à¤¾à¤ à¥€)
-      await firestore().collection('users').doc(uid).update({
-        screenTime: screenTimeRef.current,
-        battery: batteryLevel,
-        isOnline: true,
-        lastActive: firestore.FieldValue.serverTimestamp(),
-      });
-
-      console.log('Data pushed:', { screenTime: screenTimeRef.current, battery: batteryLevel });
-
-    } catch (e) {
-      console.error('Push error:', e);
-    }
-  };
-
-  // â”€â”€ Location tracking â”€â”€
   const startLocationTracking = () => {
     Geolocation.requestAuthorization();
-    Geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        setLocation({ latitude, longitude, accuracy });
-        sendLocationToFirebase(latitude, longitude, accuracy);
-      },
-      (err) => console.log('GPS error:', err),
-      { enableHighAccuracy: false, distanceFilter: 50, interval: 120000 }
-    );
-
-    // Initial position
     Geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        setLocation({ latitude, longitude, accuracy });
-        sendLocationToFirebase(latitude, longitude, accuracy);
-      },
-      (err) => console.log('Initial GPS error:', err),
+      (pos) => setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      (err) => console.log(err),
       { enableHighAccuracy: false, timeout: 15000 }
     );
   };
 
-  const sendLocationToFirebase = async (lat, lng, accuracy) => {
-    try {
-      const uid = auth().currentUser?.uid;
-      if (!uid || !parentId) return;
-
-      // Reverse geocoding (simple)
-      let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-          { headers: { 'User-Agent': 'KidShield/1.0' } }
-        );
-        const data = await resp.json();
-        if (data?.display_name) {
-          const parts = data.display_name.split(',');
-          locationName = parts.slice(0, 3).join(',').trim();
-        }
-      } catch (e) {}
-
-      const locationData = {
-        location: { lat, lng, accuracy },
-        locationName,
-        locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
-        lat, lng, // backward compat
-      };
-
-      // 1. families collection update (Web Admin)
-      if (childDocId) {
-        await firestore()
-          .collection('families').doc(parentId)
-          .collection('children').doc(childDocId)
-          .set(locationData, { merge: true });
-      }
-
-      // 2. locations collection (separate real-time tracking)
-      await firestore().collection('locations').doc(uid).set({
-        lat, lng, accuracy, childId: uid, parentId,
-        locationName,
-        timestamp: firestore.FieldValue.serverTimestamp(),
-      });
-
-    } catch (e) { console.error('Location error:', e); }
-  };
-
-  // â”€â”€ SOS â”€â”€
   const handleSOSPress = () => {
     Vibration.vibrate([0, 200, 100, 200]);
     Animated.sequence([
       Animated.timing(sosAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
       Animated.timing(sosAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
-    Alert.alert('SOS Alert', 'Send emergency alert to parent?', [
+    Alert.alert('SOS Alert', 'Send an emergency alert to your parent?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Send SOS', style: 'destructive', onPress: sendSOS },
     ]);
@@ -4267,63 +4272,14 @@ export default function ChildHome({ navigation }) {
     try {
       setSosActive(true);
       const uid = auth().currentUser?.uid;
-
-      // Location à¤ªà¤£ include à¤•à¤°à¤¾
-      if (location) {
-        await sendLocationToFirebase(location.latitude, location.longitude, location.accuracy);
-      }
-
-      // Alert firestore à¤®à¤§à¥à¤¯à¥‡
       await firestore().collection('alerts').add({
-        childId: uid,
-        childName,
-        parentId,
-        title: 'SOS Alert!',
-        body: `${childName} needs help!`,
-        message: `${childName} needs help!`,
-        type: 'SOS',
-        severity: 'high',
-        read: false,
-        timestamp: firestore.FieldValue.serverTimestamp(),
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        location: location ? { lat: location.latitude, lng: location.longitude } : null,
+        childId: uid, childName, parentId,
+        title: 'SOS Alert!', body: `${childName} needs help!`, type: 'SOS', severity: 'high',
+        read: false, timestamp: firestore.FieldValue.serverTimestamp(),
       });
-
-      // families à¤®à¤§à¥à¤¯à¥‡ recent activity add à¤•à¤°à¤¾
-      if (childDocId && parentId) {
-        await firestore()
-          .collection('families').doc(parentId)
-          .collection('children').doc(childDocId)
-          .collection('activity').add({
-            type: 'SOS',
-            description: 'SOS button pressed',
-            timestamp: firestore.FieldValue.serverTimestamp(),
-          });
-      }
-
-      // Backend notify à¤•à¤°à¤¾
-      try {
-        await fetch(`${API_URL}/api/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            parentId,
-            title: 'SOS Alert!',
-            body: `${childName} needs help immediately!`,
-            data: { type: 'SOS', childId: uid }
-          }),
-        });
-      } catch (e) {}
-
-      Alert.alert('SOS Sent', 'Your parent has been notified!');
-    } catch (e) {
-      Alert.alert('Error', 'Could not send SOS. Check internet.');
-    } finally { setSosActive(false); }
+      Alert.alert('SOS Sent', 'Your parent has been notified immediately!');
+    } catch (e) {} finally { setSosActive(false); }
   };
-
-  const percentage = Math.min((screenTime / limit) * 100, 100);
-  const timeLeft = Math.max(limit - screenTime, 0);
-  const isNearLimit = percentage >= 80;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#060b14' }}>
@@ -4334,112 +4290,94 @@ export default function ChildHome({ navigation }) {
         </View>
 
         {!parentId && (
-          <TouchableOpacity style={styles.linkBanner}
-            onPress={() => navigation.navigate('Pairing')}>
-            <Text style={styles.linkBannerIcon}>ðŸ”—</Text>
+          <TouchableOpacity style={styles.linkBanner} onPress={() => navigation.navigate('Pairing')}>
+            <Text style={styles.linkBannerIcon}>🔗</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.linkBannerTitle}>Link to Parent</Text>
-              <Text style={styles.linkBannerText}>Tap to enter pairing code</Text>
+              <Text style={styles.linkBannerText}>Tap here to enter the pairing code</Text>
             </View>
-            <Text style={{ color: '#00d4ff', fontSize: 20 }}>â†’</Text>
+            <Text style={{ color: '#00d4ff', fontSize: 20 }}>→</Text>
           </TouchableOpacity>
         )}
 
-        {/* Screen Time Card */}
-        <View style={[styles.card, isNearLimit && styles.cardWarning]}>
-          <Text style={styles.cardLabel}>Today Screen Time</Text>
-          <Text style={styles.timeValue}>
-            {Math.floor(screenTime / 60)}h {screenTime % 60}m
-            <Text style={styles.timeLimit}> / {Math.floor(limit / 60)}h {limit % 60}m</Text>
-          </Text>
-          <View style={styles.progressBg}>
-            <View style={[styles.progressFill,
-              { width: `${percentage}%` },
-              isNearLimit && { backgroundColor: '#ff4444' }
-            ]} />
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Monitoring Permissions</Text>
+          <View style={styles.permList}>
+            <PermRow icon="🚀" title="Background Execution" state={permsState.overlay} onAllow={() => requestSpecificPermission('overlay')} />
+            <PermRow icon="📍" title="Location Tracking" state={permsState.location} onAllow={() => requestSpecificPermission('location')} />
+            <PermRow icon="📸" title="Remote Camera" state={permsState.camera} onAllow={() => requestSpecificPermission('camera')} />
+            <PermRow icon="🎤" title="Remote Audio" state={permsState.microphone} onAllow={() => requestSpecificPermission('microphone')} />
+            <PermRow icon="🛡️" title="Uninstall Protection" state={permsState.deviceAdmin} onAllow={() => requestSpecificPermission('deviceAdmin')} />
           </View>
-          <Text style={[styles.timeLeftText, isNearLimit && { color: '#ff4444' }]}>
-            {isNearLimit ? `Warning: Only ${timeLeft} min left!` : `${timeLeft} min remaining`}
-          </Text>
         </View>
 
-        {/* Status Row */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Status</Text>
+          <Text style={styles.cardLabel}>Device Status</Text>
           <View style={styles.statusRow}>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>ðŸ”‹</Text>
+              <Text style={styles.statusIcon}>🔋</Text>
               <Text style={styles.statusText}>{battery !== null ? `${battery}%` : '...'}</Text>
               <Text style={styles.statusLabel}>Battery</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>ðŸ“</Text>
+              <Text style={styles.statusIcon}>📌</Text>
               <Text style={styles.statusText}>{location ? 'Active' : 'Pending'}</Text>
               <Text style={styles.statusLabel}>Location</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{adminEnabled ? 'ðŸ”’' : 'ðŸ›¡ï¸'}</Text>
-              <Text style={styles.statusText}>{adminEnabled ? 'Protected' : 'Basic'}</Text>
+              <Text style={styles.statusIcon}>{adminEnabled ? '🔒' : '🔓'}</Text>
+              <Text style={styles.statusText}>{adminEnabled ? 'Secured' : 'Basic'}</Text>
               <Text style={styles.statusLabel}>Security</Text>
-            </View>
-            <View style={styles.statusItem}>
-              <Text style={styles.statusIcon}>{parentId ? 'âœ…' : 'âŒ'}</Text>
-              <Text style={styles.statusText}>{parentId ? 'Linked' : 'Not Linked'}</Text>
-              <Text style={styles.statusLabel}>Parent</Text>
             </View>
           </View>
         </View>
 
-        {/* SOS Button */}
         <View style={styles.sosContainer}>
           <Text style={styles.sosLabel}>Emergency:</Text>
           <Animated.View style={{ transform: [{ scale: sosAnim }] }}>
-            <TouchableOpacity
-              style={[styles.sosBtn, sosActive && { opacity: 0.6 }]}
-              onPress={handleSOSPress} disabled={sosActive} activeOpacity={0.8}>
-              <Text style={styles.sosIcon}>ðŸ†˜</Text>
+            <TouchableOpacity style={[styles.sosBtn, sosActive && { opacity: 0.6 }]} onPress={handleSOSPress} disabled={sosActive} activeOpacity={0.8}>
+              <Text style={styles.sosIcon}>🆘</Text>
               <Text style={styles.sosBtnText}>SOS</Text>
-              <Text style={styles.sosSubText}>Press to alert parent</Text>
+              <Text style={styles.sosSubText}>Tap to alert parent</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
 
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>â„¹ï¸ KidShield Active</Text>
-          <Text style={styles.infoText}>â€¢ Location shared with parent</Text>
-          <Text style={styles.infoText}>â€¢ Screen time: {screenTime} minutes today</Text>
-          <Text style={styles.infoText}>â€¢ Battery: {battery !== null ? `${battery}%` : 'reading...'}</Text>
-          <Text style={styles.infoText}>â€¢ To open hidden app: dial *#1234#</Text>
-        </View>
+        <TouchableOpacity style={styles.hideAppBtn} onPress={handleHideApp}>
+          <Text style={styles.hideAppIcon}>👻</Text>
+          <Text style={styles.hideAppText}>Hide KidShield App</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </View>
   );
 }
+
+const PermRow = ({ icon, title, state, onAllow }) => (
+  <View style={styles.permRow}>
+    <Text style={styles.permRowIcon}>{icon}</Text>
+    <Text style={styles.permRowTitle}>{title}</Text>
+    {state ? (
+      <Text style={styles.permGranted}>✅ Active</Text>
+    ) : (
+      <TouchableOpacity style={styles.permAllowBtn} onPress={onAllow}>
+        <Text style={styles.permAllowText}>Allow</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+);
 
 const styles = StyleSheet.create({
   content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
   header: { marginBottom: 16 },
   greeting: { fontSize: 26, fontWeight: '700', color: '#ffffff', marginBottom: 4 },
   date: { fontSize: 13, color: '#8899aa' },
-  linkBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(0,212,255,0.08)', borderRadius: 14, padding: 16,
-    marginBottom: 16, borderWidth: 1.5, borderColor: '#00d4ff',
-  },
+  linkBanner: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(0,212,255,0.08)', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: '#00d4ff' },
   linkBannerIcon: { fontSize: 24 },
   linkBannerTitle: { fontSize: 15, fontWeight: '700', color: '#00d4ff', marginBottom: 2 },
   linkBannerText: { fontSize: 12, color: '#8899aa' },
-  card: {
-    backgroundColor: '#111d35', borderRadius: 16, padding: 20,
-    marginBottom: 16, borderWidth: 1, borderColor: '#1e2d4a',
-  },
-  cardWarning: { borderColor: '#ff4444' },
-  cardLabel: { fontSize: 13, color: '#8899aa', marginBottom: 10, fontWeight: '600' },
-  timeValue: { fontSize: 36, fontWeight: '700', color: '#00d4ff', marginBottom: 12 },
-  timeLimit: { fontSize: 18, color: '#8899aa' },
-  progressBg: { height: 8, backgroundColor: '#1e2d4a', borderRadius: 4, marginBottom: 8 },
-  progressFill: { height: 8, backgroundColor: '#00d4ff', borderRadius: 4 },
-  timeLeftText: { fontSize: 13, color: '#00d4ff' },
+  card: { backgroundColor: '#111d35', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#1e2d4a' },
+  cardLabel: { fontSize: 13, color: '#8899aa', marginBottom: 15, fontWeight: '600' },
   statusRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
   statusItem: { alignItems: 'center' },
   statusIcon: { fontSize: 24, marginBottom: 4 },
@@ -4447,20 +4385,20 @@ const styles = StyleSheet.create({
   statusLabel: { fontSize: 11, color: '#8899aa', marginTop: 2 },
   sosContainer: { alignItems: 'center', marginVertical: 20 },
   sosLabel: { fontSize: 13, color: '#8899aa', marginBottom: 16 },
-  sosBtn: {
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: '#1a0000', borderWidth: 3, borderColor: '#ff0000',
-    alignItems: 'center', justifyContent: 'center', elevation: 8,
-  },
+  sosBtn: { width: 140, height: 140, borderRadius: 70, backgroundColor: '#1a0000', borderWidth: 3, borderColor: '#ff0000', alignItems: 'center', justifyContent: 'center', elevation: 8 },
   sosIcon: { fontSize: 36, marginBottom: 4 },
   sosBtnText: { fontSize: 22, fontWeight: '700', color: '#ff0000' },
   sosSubText: { fontSize: 10, color: '#ff6666', marginTop: 2 },
-  infoCard: {
-    backgroundColor: '#0a1628', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#1e2d4a',
-  },
-  infoTitle: { fontSize: 15, fontWeight: '700', color: '#ffffff', marginBottom: 10 },
-  infoText: { fontSize: 13, color: '#8899aa', marginBottom: 6 },
+  permList: { gap: 12 },
+  permRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a1220', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#1e2d4a' },
+  permRowIcon: { fontSize: 20, marginRight: 10 },
+  permRowTitle: { flex: 1, color: '#ffffff', fontSize: 14, fontWeight: '500' },
+  permGranted: { color: '#00cc88', fontSize: 13, fontWeight: '700' },
+  permAllowBtn: { backgroundColor: '#00d4ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  permAllowText: { color: '#000', fontSize: 12, fontWeight: '700' },
+  hideAppBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1e2d4a', padding: 15, borderRadius: 12, marginTop: 10 },
+  hideAppIcon: { fontSize: 20, marginRight: 10 },
+  hideAppText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
 });
 
 
@@ -4477,24 +4415,18 @@ import { NativeModules } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
-const { KidShieldModule, ScreenMirror } = NativeModules;
+const { KidShieldModule, ScreenMirror, AppBlocker } = NativeModules;
 
 export default function SetupWizard({ navigation }) {
   const [permissions, setPermissions] = useState({
-    location: false,
-    camera: false,
-    microphone: false,
-    usageStats: false,
-    accessibility: false,
-    deviceAdmin: false,
-    screenCapture: false,
+    location: false, camera: false, microphone: false,
+    usageStats: false, accessibility: false, deviceAdmin: false,
+    screenCapture: false, overlay: false,
   });
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState('');
 
-  useEffect(() => {
-    checkAllPermissions();
-  }, []);
+  useEffect(() => { checkAllPermissions(); }, []);
 
   const checkAllPermissions = async () => {
     setLoading(true);
@@ -4502,16 +4434,9 @@ export default function SetupWizard({ navigation }) {
     const camera = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
     const microphone = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
     const deviceAdmin = KidShieldModule ? await KidShieldModule.isDeviceAdminEnabled() : false;
+    const overlay = AppBlocker ? await AppBlocker.isOverlayPermissionGranted() : false;
 
-    setPermissions({
-      location,
-      camera,
-      microphone,
-      usageStats: false, // checked via AppOps, assume pending
-      accessibility: false, // need to open settings to check
-      deviceAdmin,
-      screenCapture: false,
-    });
+    setPermissions({ location, camera, microphone, usageStats: false, accessibility: false, deviceAdmin, screenCapture: false, overlay });
     setLoading(false);
   };
 
@@ -4519,138 +4444,75 @@ export default function SetupWizard({ navigation }) {
     setChecking(type);
     try {
       switch (type) {
-        case 'location':
-          const locResult = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-            {
-              title: 'Location Permission',
-              message: 'KidShield à¤²à¤¾ à¤¤à¥à¤®à¤šà¥‡ location track à¤•à¤°à¤¾à¤¯à¤²à¤¾ permission à¤¹à¤µà¥€.',
-              buttonPositive: 'Allow',
-              buttonNegative: 'Deny',
-            }
-          );
-          const locGranted = locResult === PermissionsAndroid.RESULTS.GRANTED;
-          // Also request background location
-          if (locGranted) {
-            await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
-              {
-                title: 'Background Location',
-                message: 'App background à¤®à¤§à¥à¤¯à¥‡ à¤…à¤¸à¤¤à¤¾à¤¨à¤¾ à¤ªà¤£ location track à¤•à¤°à¤¾à¤¯à¤²à¤¾.',
-                buttonPositive: 'Allow Always',
-              }
-            );
-          }
-          setPermissions(p => ({ ...p, location: locGranted }));
-          break;
-
-        case 'camera':
-          const camResult = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.CAMERA,
-            {
-              title: 'Camera Permission',
-              message: 'Parent à¤²à¤¾ remote camera access à¤•à¤°à¤¾à¤¯à¤²à¤¾ permission à¤¹à¤µà¥€.',
-              buttonPositive: 'Allow',
-            }
-          );
-          setPermissions(p => ({ ...p, camera: camResult === PermissionsAndroid.RESULTS.GRANTED }));
-          break;
-
-        case 'microphone':
-          const micResult = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-            {
-              title: 'Microphone Permission',
-              message: 'Parent à¤²à¤¾ ambient audio monitor à¤•à¤°à¤¾à¤¯à¤²à¤¾ permission à¤¹à¤µà¥€.',
-              buttonPositive: 'Allow',
-            }
-          );
-          setPermissions(p => ({ ...p, microphone: micResult === PermissionsAndroid.RESULTS.GRANTED }));
-          break;
-
-        case 'usageStats':
+        case 'overlay':
           Alert.alert(
-            'Usage Access',
-            'Settings à¤‰à¤˜à¤¡à¥‡à¤². "KidShield" à¤¶à¥‹à¤§à¤¾ à¤†à¤£à¤¿ enable à¤•à¤°à¤¾.',
+            'Background Execution',
+            'KidShield needs permission to run in the background.\n\nSteps:\n1. Tap "Open Settings".\n2. Find KidShield and enable "Allow display over other apps".',
             [
               { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Open Settings',
-                onPress: () => {
+              { text: 'Open Settings', onPress: async () => {
+                  if (AppBlocker) await AppBlocker.requestOverlayPermission();
+                  setTimeout(async () => {
+                    const granted = await AppBlocker.isOverlayPermissionGranted();
+                    setPermissions(p => ({ ...p, overlay: granted }));
+                  }, 3000);
+                }
+              }
+            ]
+          );
+          break;
+        case 'location':
+          const locResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+          if (locResult === PermissionsAndroid.RESULTS.GRANTED) {
+            await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
+          }
+          setPermissions(p => ({ ...p, location: locResult === PermissionsAndroid.RESULTS.GRANTED }));
+          break;
+        case 'camera':
+          const camResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+          setPermissions(p => ({ ...p, camera: camResult === PermissionsAndroid.RESULTS.GRANTED }));
+          break;
+        case 'microphone':
+          const micResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+          setPermissions(p => ({ ...p, microphone: micResult === PermissionsAndroid.RESULTS.GRANTED }));
+          break;
+        case 'usageStats':
+          Alert.alert('Usage Access', 'Settings will open. Enable Usage Access for KidShield.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => {
                   Linking.sendIntent('android.settings.USAGE_ACCESS_SETTINGS');
                   setTimeout(() => setPermissions(p => ({ ...p, usageStats: true })), 3000);
                 }
               }
-            ]
-          );
+            ]);
           break;
-
         case 'accessibility':
-          Alert.alert(
-            'Accessibility Service',
-            'Settings à¤‰à¤˜à¤¡à¥‡à¤². "Installed Apps" â†’ "KidShield" â†’ Enable à¤•à¤°à¤¾.',
-            [
+          Alert.alert('Accessibility Service', 'Settings will open. Enable Accessibility for KidShield.', [
               { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Open Settings',
-                onPress: async () => {
+              { text: 'Open Settings', onPress: async () => {
                   if (KidShieldModule) await KidShieldModule.openAccessibilitySettings();
-                  else Linking.openSettings();
                   setTimeout(() => setPermissions(p => ({ ...p, accessibility: true })), 3000);
                 }
               }
-            ]
-          );
+            ]);
           break;
-
         case 'deviceAdmin':
-          Alert.alert(
-            'Device Admin',
-            'KidShield à¤²à¤¾ uninstall à¤¹à¥‹à¤£à¥à¤¯à¤¾à¤ªà¤¾à¤¸à¥‚à¤¨ à¤°à¥‹à¤–à¤¾à¤¯à¤²à¤¾ Device Admin enable à¤•à¤°à¤¾.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Enable',
-                onPress: async () => {
-                  if (KidShieldModule) {
-                    await KidShieldModule.requestDeviceAdmin();
-                    setTimeout(async () => {
-                      const enabled = await KidShieldModule.isDeviceAdminEnabled();
-                      setPermissions(p => ({ ...p, deviceAdmin: enabled }));
-                    }, 2000);
-                  }
-                }
-              }
-            ]
-          );
+          if (KidShieldModule) {
+            await KidShieldModule.requestDeviceAdmin();
+            setTimeout(async () => {
+              const enabled = await KidShieldModule.isDeviceAdminEnabled();
+              setPermissions(p => ({ ...p, deviceAdmin: enabled }));
+            }, 2000);
+          }
           break;
-
         case 'screenCapture':
-          Alert.alert(
-            'Screen Capture',
-            'Parent screen monitor à¤•à¤°à¥‚ à¤¶à¤•à¥‡à¤². Allow à¤•à¤°à¤¾à¤¯à¤šà¥‡ à¤•à¤¾?',
-            [
-              { text: 'Deny', style: 'cancel' },
-              {
-                text: 'Allow',
-                onPress: async () => {
-                  if (ScreenMirror) {
-                    try {
-                      await ScreenMirror.requestPermission();
-                      setPermissions(p => ({ ...p, screenCapture: true }));
-                    } catch (e) {
-                      Alert.alert('Denied', 'Screen capture permission denied.');
-                    }
-                  }
-                }
-              }
-            ]
-          );
+          if (ScreenMirror) {
+             await ScreenMirror.requestPermission().catch(()=>{});
+             setPermissions(p => ({ ...p, screenCapture: true }));
+          }
           break;
       }
-    } catch (e) {
-      console.error('Permission error:', type, e);
-    }
+    } catch (e) {}
     setChecking('');
   };
 
@@ -4658,92 +4520,59 @@ export default function SetupWizard({ navigation }) {
     try {
       const uid = auth().currentUser?.uid;
       if (uid) {
-        await firestore().collection('users').doc(uid).update({
-          setupDone: true,
-          permissions: permissions,
-          setupAt: firestore.FieldValue.serverTimestamp(),
-        });
+        await firestore().collection('users').doc(uid).update({ setupDone: true, permissions, setupAt: firestore.FieldValue.serverTimestamp() });
       }
       navigation?.replace('ChildApp');
-    } catch (e) {
-      navigation?.replace('ChildApp');
-    }
+    } catch (e) { navigation?.replace('ChildApp'); }
   };
 
-  const allRequired = permissions.location && permissions.camera && permissions.microphone;
+  const allRequired = permissions.location && permissions.camera && permissions.microphone && permissions.overlay;
   const grantedCount = Object.values(permissions).filter(Boolean).length;
   const totalCount = Object.values(permissions).length;
 
   const permList = [
-    { key: 'location', icon: 'ðŸ“', title: 'Location', desc: 'GPS tracking - Required', required: true },
-    { key: 'camera', icon: 'ðŸ“·', title: 'Camera', desc: 'Remote camera access - Required', required: true },
-    { key: 'microphone', icon: 'ðŸŽ¤', title: 'Microphone', desc: 'Ambient audio monitoring - Required', required: true },
-    { key: 'usageStats', icon: 'ðŸ“Š', title: 'Usage Stats', desc: 'App usage tracking - Recommended', required: false },
-    { key: 'accessibility', icon: 'â™¿', title: 'Accessibility', desc: 'App blocking - Recommended', required: false },
-    { key: 'deviceAdmin', icon: 'ðŸ›¡ï¸', title: 'Device Admin', desc: 'Prevent uninstall - Recommended', required: false },
-    { key: 'screenCapture', icon: 'ðŸ“±', title: 'Screen Monitor', desc: 'Screen live view - Optional', required: false },
+    { key: 'overlay', icon: '🚀', title: 'Background Execution', desc: 'Display over other apps - Required', required: true },
+    { key: 'location', icon: '📍', title: 'Location', desc: 'GPS tracking - Required', required: true },
+    { key: 'camera', icon: '📸', title: 'Camera', desc: 'Remote camera access - Required', required: true },
+    { key: 'microphone', icon: '🎤', title: 'Microphone', desc: 'Ambient audio monitoring - Required', required: true },
+    { key: 'usageStats', icon: '📊', title: 'Usage Stats', desc: 'App usage tracking - Recommended', required: false },
+    { key: 'accessibility', icon: '⚙️', title: 'Accessibility', desc: 'App blocking - Recommended', required: false },
+    { key: 'deviceAdmin', icon: '🛡️', title: 'Device Admin', desc: 'Prevent uninstall - Recommended', required: false },
+    { key: 'screenCapture', icon: '📱', title: 'Screen Monitor', desc: 'Screen live view - Optional', required: false },
   ];
 
-  if (loading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#00d4ff" />
-        <Text style={s.loadingText}>Checking permissions...</Text>
-      </View>
-    );
-  }
+  if (loading) return <View style={s.loadingContainer}><ActivityIndicator size="large" color="#00d4ff" /></View>;
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Text style={s.title}>ðŸ›¡ï¸ KidShield Setup</Text>
-      <Text style={s.subtitle}>Permissions à¤¦à¥à¤¯à¤¾ à¤œà¥‡à¤£à¥‡à¤•à¤°à¥‚à¤¨ monitoring à¤•à¤¾à¤® à¤•à¤°à¥‡à¤²</Text>
-
-      {/* Progress */}
+      <Text style={s.title}>🛡️ KidShield Setup</Text>
+      <Text style={s.subtitle}>Grant permissions to enable monitoring</Text>
+      
       <View style={s.progressCard}>
         <Text style={s.progressLabel}>{grantedCount}/{totalCount} Permissions Granted</Text>
-        <View style={s.progressBar}>
-          <View style={[s.progressFill, { width: `${(grantedCount / totalCount) * 100}%` }]} />
-        </View>
+        <View style={s.progressBar}><View style={[s.progressFill, { width: `${(grantedCount / totalCount) * 100}%` }]} /></View>
       </View>
 
-      {/* Permission Cards */}
       {permList.map(p => (
         <View key={p.key} style={[s.card, permissions[p.key] && s.cardGranted]}>
           <View style={s.cardRow}>
             <Text style={s.permIcon}>{p.icon}</Text>
             <View style={s.permInfo}>
-              <Text style={s.permTitle}>
-                {p.title}
-                {p.required && <Text style={s.required}> *</Text>}
-              </Text>
+              <Text style={s.permTitle}>{p.title}{p.required && <Text style={s.required}> *</Text>}</Text>
               <Text style={s.permDesc}>{p.desc}</Text>
             </View>
-            {permissions[p.key] ? (
-              <Text style={s.granted}>âœ…</Text>
-            ) : (
-              <TouchableOpacity
-                style={s.allowBtn}
-                onPress={() => requestPermission(p.key)}
-                disabled={checking === p.key}>
-                {checking === p.key
-                  ? <ActivityIndicator size="small" color="#000" />
-                  : <Text style={s.allowBtnText}>Allow</Text>
-                }
+            {permissions[p.key] ? ( <Text style={s.granted}>✅</Text> ) : (
+              <TouchableOpacity style={s.allowBtn} onPress={() => requestPermission(p.key)} disabled={checking === p.key}>
+                {checking === p.key ? <ActivityIndicator size="small" color="#000" /> : <Text style={s.allowBtnText}>Allow</Text>}
               </TouchableOpacity>
             )}
           </View>
         </View>
       ))}
 
-      {/* Complete Button */}
-      <TouchableOpacity
-        style={[s.doneBtn, !allRequired && s.doneBtnDisabled]}
-        onPress={completeSetup}>
-        <Text style={s.doneBtnText}>
-          {allRequired ? 'âœ… Setup Complete - Start!' : 'âš ï¸ Required permissions pending'}
-        </Text>
+      <TouchableOpacity style={[s.doneBtn, !allRequired && s.doneBtnDisabled]} onPress={completeSetup}>
+        <Text style={s.doneBtnText}>{allRequired ? '✅ Setup Complete - Start!' : '⚠️ Required permissions pending'}</Text>
       </TouchableOpacity>
-
       <TouchableOpacity style={s.skipBtn} onPress={() => navigation?.replace('ChildApp')}>
         <Text style={s.skipText}>Skip for now</Text>
       </TouchableOpacity>
@@ -4755,7 +4584,6 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060b14' },
   content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#060b14' },
-  loadingText: { color: '#8899aa', marginTop: 12 },
   title: { fontSize: 26, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 13, color: '#8899aa', textAlign: 'center', marginBottom: 24 },
   progressCard: { backgroundColor: '#111d35', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#1e2d4a' },
@@ -4765,11 +4593,9 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#111d35', borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#1e2d4a' },
   cardGranted: { borderColor: '#00cc88', backgroundColor: '#0a1a12' },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  permIcon: { fontSize: 28 },
-  permInfo: { flex: 1 },
+  permIcon: { fontSize: 28 }, permInfo: { flex: 1 },
   permTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  required: { color: '#ff4444' },
-  permDesc: { fontSize: 11, color: '#8899aa', marginTop: 2 },
+  required: { color: '#ff4444' }, permDesc: { fontSize: 11, color: '#8899aa', marginTop: 2 },
   granted: { fontSize: 20 },
   allowBtn: { backgroundColor: '#00d4ff', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, minWidth: 60, alignItems: 'center' },
   allowBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
@@ -7155,12 +6981,12 @@ export default PerformanceManager;
 === FILE: src\services\RemoteCommandHandler.js ===
 ================================================
 
-import { NativeModules, NativeEventEmitter } from 'react-native';
+import { NativeModules, NativeEventEmitter, AppState } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import io from 'socket.io-client';
 
-const { RemoteCamera, AmbientAudio, ScreenMirror } = NativeModules;
+const { RemoteCamera, AmbientAudio, ScreenMirror, KidShieldModule } = NativeModules;
 const SOCKET_SERVER_URL = 'https://kidshield-0757.onrender.com';
 
 class RemoteCommandHandler {
@@ -7174,9 +7000,12 @@ class RemoteCommandHandler {
     this.cameraListener = null;
     this.audioListener = null;
     this.processingCommands = new Set();
+    this.pingInterval = null;
   }
 
   async init() {
+    if (this.isInitialized) return;
+
     try {
       const user = auth().currentUser;
       if (!user) return;
@@ -7199,19 +7028,59 @@ class RemoteCommandHandler {
       this._connectSocket();
       this._attachNativeListeners();
 
-      if (RemoteCamera) await RemoteCamera.setChildInfo(this.childId, this.parentId).catch(() => {});
-      if (AmbientAudio) await AmbientAudio.setChildInfo(this.childId, this.parentId).catch(() => {});
-      if (ScreenMirror) await ScreenMirror.setChildInfo(this.childId, this.parentId).catch(() => {});
+      // 🔥 CRITICAL FIX: Safe Checks Added to prevent "is not a function" error
+      try { if (RemoteCamera && typeof RemoteCamera.setChildInfo === 'function') await RemoteCamera.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (AmbientAudio && typeof AmbientAudio.setChildInfo === 'function') await AmbientAudio.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (ScreenMirror && typeof ScreenMirror.setChildInfo === 'function') await ScreenMirror.setChildInfo(this.childId, this.parentId); } catch(e){}
 
       this._attachCommandListener();
+      
+      AppState.addEventListener('change', this._handleAppStateChange.bind(this));
       this.isInitialized = true;
-    } catch (err) {}
+      console.log('✅ RemoteCommandHandler Ready!');
+    } catch (err) {
+      console.log('❌ RemoteCommand Init Error:', err);
+    }
+  }
+
+  _handleAppStateChange(nextAppState) {
+    if (nextAppState === 'active') {
+       if (!this.socket?.connected) this._connectSocket();
+    }
   }
 
   _connectSocket() {
     if (this.socket?.connected) return;
-    this.socket = io(SOCKET_SERVER_URL, { transports: ['websocket'], reconnection: true });
-    this.socket.on('connect', () => { this.socket.emit('join_room', { parentId: this.parentId }); });
+    
+    console.log("Attempting Socket Connection...");
+    this.socket = io(SOCKET_SERVER_URL, { 
+        transports: ['websocket'], 
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        pingTimeout: 60000, 
+        pingInterval: 25000  
+    });
+
+    this.socket.on('connect', () => { 
+        console.log("Socket Connected!", this.socket.id);
+        this.socket.emit('join_room', { parentId: this.parentId }); 
+        
+        if(this.pingInterval) clearInterval(this.pingInterval);
+        this.pingInterval = setInterval(() => {
+            if(this.socket && this.socket.connected) {
+                this.socket.emit('ping', { childId: this.childId });
+            }
+        }, 20000);
+    });
+
+    this.socket.on('disconnect', (reason) => {
+        console.log("Socket Disconnected:", reason);
+        if(this.pingInterval) clearInterval(this.pingInterval);
+        if (reason === 'io server disconnect' || reason === 'transport close') {
+            setTimeout(() => this.socket.connect(), 2000);
+        }
+    });
   }
 
   _attachNativeListeners() {
@@ -7263,38 +7132,73 @@ class RemoteCommandHandler {
 
   async handleCommand(commandId, commandData) {
     const { command, data = {} } = commandData;
+    console.log("Received Command:", command);
     try {
       await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
+
+      // 🔥 ॲपला वर आणण्याची खात्री करा (Wake up App)
+      if (['START_LIVE_CAMERA', 'START_LIVE_VIEW', 'START_AUDIO_CAPTURE'].includes(command)) {
+         if (KidShieldModule && KidShieldModule.wakeApp) {
+             console.log("Waking up app over lock screen...");
+             await KidShieldModule.wakeApp().catch(()=>{});
+             // App समोर येण्यासाठी 3 seconds वेळ द्या
+             await new Promise(resolve => setTimeout(resolve, 3000)); 
+         }
+      }
 
       switch (command) {
         case 'START_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.startLiveCamera(data.useFront === true, data.intervalSeconds || 1);
+          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+             await AmbientAudio.startAmbientCapture('camera_audio').catch(()=>{});
+          }
           break;
+          
         case 'STOP_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.stopLiveCamera();
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture().catch(()=>{});
+          }
           break;
+          
         case 'START_AUDIO_CAPTURE':
-          if (AmbientAudio) await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+             await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          }
           break;
+          
         case 'STOP_AUDIO_CAPTURE':
-          if (AmbientAudio) await AmbientAudio.stopAmbientCapture();
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture();
+          }
           break;
+          
         case 'START_LIVE_VIEW':
           if (ScreenMirror) {
             await ScreenMirror.requestPermission();
             await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+            if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
+               await AmbientAudio.startAmbientCapture('screen_audio').catch(()=>{});
+            }
           }
           break;
+          
         case 'STOP_LIVE_VIEW':
           if (ScreenMirror) await ScreenMirror.stopLiveView();
+          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
+             await AmbientAudio.stopAmbientCapture().catch(() => {});
+          }
           break;
+          
         case 'LOCK_DEVICE':
           const { Alert } = require('react-native');
           Alert.alert('🔒 Phone Locked', 'Parent has locked this device.', [{ text: 'OK' }], { cancelable: false });
           break;
       }
+      
       await firestore().collection('commands').doc(commandId).update({ status: 'executed', executedAt: firestore.FieldValue.serverTimestamp() });
     } catch (error) {
+      console.log("Command Execution Failed:", error.message);
       await firestore().collection('commands').doc(commandId).update({ status: 'failed', error: error.message }).catch(() => {});
     } finally {
       setTimeout(() => this.processingCommands.delete(commandId), 5000);
@@ -7303,7 +7207,12 @@ class RemoteCommandHandler {
 
   destroy() {
     if (this.unsubscribe) this.unsubscribe();
-    if (this.socket) this.socket.disconnect();
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+    }
+    this.isInitialized = false;
   }
 }
 export default new RemoteCommandHandler();
@@ -7782,137 +7691,255 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     :root {
-      --bg: #060b14; --card: #111d35; --accent: #00d4ff; --accent2: #7c3aed;
-      --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
-      --text: #ffffff; --muted: #8899aa; --border: #1e3a5f;
+      /* Modern Deep Blue Theme */
+      --bg: #030712; 
+      --bg-gradient: linear-gradient(135deg, #030712 0%, #0f172a 100%);
+      --card: rgba(17, 24, 39, 0.7); 
+      --card-hover: rgba(31, 41, 55, 0.8);
+      --accent: #0ea5e9; 
+      --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+      --accent2: #8b5cf6;
+      --success: #10b981; 
+      --danger: #ef4444; 
+      --warning: #f59e0b;
+      --text: #f8fafc; 
+      --muted: #94a3b8; 
+      --border: rgba(51, 65, 85, 0.5);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
+    
+    body { 
+      background: var(--bg-gradient); 
+      color: var(--text); 
+      min-height: 100vh; 
+      background-attachment: fixed;
+    }
+
+    /* CUSTOM SCROLLBAR FOR PROFESSIONAL LOOK */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
     /* LOGIN */
     #login-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .login-card { background: var(--card); border-radius: 24px; padding: 40px; width: 100%; max-width: 400px; border: 1px solid var(--border); }
-    .login-logo { font-size: 48px; text-align: center; margin-bottom: 8px; }
-    .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+    .login-card { 
+      background: var(--card); 
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 24px; 
+      padding: 40px; 
+      width: 100%; 
+      max-width: 420px; 
+      border: 1px solid var(--border);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .login-logo { font-size: 56px; text-align: center; margin-bottom: 12px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
+    .login-title { font-size: 28px; font-weight: 800; text-align: center; margin-bottom: 6px; letter-spacing: -0.5px; }
     .login-sub { color: var(--muted); text-align: center; margin-bottom: 32px; font-size: 14px; }
 
-    /* APP */
+    /* APP LAYOUT */
     #app { display: none; }
-    .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; }
-    .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
-    .sidebar-logo-text { font-size: 18px; font-weight: 900; }
-    .sidebar-logo-sub { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; transition: all 0.15s; border-left: 3px solid transparent; }
-    .nav-item:hover { background: rgba(0,212,255,0.05); color: var(--text); }
-    .nav-item.active { background: rgba(0,212,255,0.1); color: var(--accent); border-left-color: var(--accent); }
-    .nav-icon { font-size: 18px; min-width: 22px; text-align: center; }
+    .sidebar { 
+      position: fixed; left: 0; top: 0; width: 240px; height: 100vh; 
+      background: rgba(15, 23, 42, 0.95); 
+      backdrop-filter: blur(10px);
+      border-right: 1px solid var(--border); 
+      padding: 24px 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
+      transition: width 0.3s ease;
+    }
+    .sidebar-logo { padding: 0 24px 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .sidebar-logo-text { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
+    .sidebar-logo-sub { color: var(--muted); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    
+    .nav-item { 
+      display: flex; align-items: center; gap: 12px; padding: 14px 24px; 
+      cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500;
+      transition: all 0.2s ease; border-left: 4px solid transparent; 
+    }
+    .nav-item:hover { background: rgba(14, 165, 233, 0.08); color: var(--text); }
+    .nav-item.active { 
+      background: rgba(14, 165, 233, 0.15); 
+      color: var(--accent); 
+      border-left-color: var(--accent); 
+      font-weight: 600;
+    }
+    .nav-icon { font-size: 20px; min-width: 24px; text-align: center; transition: transform 0.2s; }
+    .nav-item:hover .nav-icon { transform: scale(1.1); }
     .nav-logout { margin-top: auto; }
-    .nav-logout:hover { color: var(--danger) !important; }
-    .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
+    .nav-logout:hover { color: var(--danger) !important; background: rgba(239, 68, 68, 0.1); }
+    
+    .main { margin-left: 240px; padding: 32px; min-height: 100vh; transition: margin-left 0.3s ease; }
 
     /* CHILDREN TABS */
-    .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
-    .child-tab { background: var(--card); border: 2px solid transparent; border-radius: 40px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
-    .child-tab.active { border-color: var(--accent); color: var(--accent); }
-    .child-tab-add { border-style: dashed !important; border-color: var(--border) !important; }
-    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+    .children-tabs { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; align-items: center; }
+    .child-tab { 
+      background: var(--card); border: 1px solid var(--border); border-radius: 40px; 
+      padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); 
+      transition: all 0.2s ease; backdrop-filter: blur(8px); display: flex; align-items: center; gap: 8px;
+    }
+    .child-tab:hover { border-color: rgba(14, 165, 233, 0.5); color: var(--text); transform: translateY(-2px); }
+    .child-tab.active { 
+      background: var(--accent-gradient); color: #fff; border-color: transparent; 
+      box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+    }
+    .child-tab-add { border-style: dashed !important; background: transparent; }
+    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; transform: none; }
 
-    /* STATS */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
-    .stat-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); position: relative; overflow: hidden; }
-    .stat-icon { font-size: 28px; margin-bottom: 12px; }
-    .stat-val { font-size: 26px; font-weight: 900; }
-    .stat-lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
-    .stat-badge { position: absolute; top: 14px; right: 14px; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
-    .stat-badge-online { background: rgba(34,197,94,0.15); color: var(--success); }
-    .stat-badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
+    /* STATS DASHBOARD */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px; }
+    .stat-card { 
+      background: var(--card); border-radius: 20px; padding: 24px; 
+      border: 1px solid var(--border); position: relative; overflow: hidden;
+      backdrop-filter: blur(10px); transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
+    .stat-icon { font-size: 32px; margin-bottom: 16px; display: inline-block; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 16px; }
+    .stat-val { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; }
+    .stat-lbl { color: var(--muted); font-size: 13px; font-weight: 500; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-badge { position: absolute; top: 20px; right: 20px; font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 700; letter-spacing: 0.5px; }
+    .stat-badge-online { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .stat-badge-offline { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
 
     /* SECTIONS */
-    .section { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
-    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
-    .section-title { font-size: 16px; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; }
-    th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-    td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(30,58,95,0.5); vertical-align: middle; }
+    .section { background: var(--card); border-radius: 20px; padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); backdrop-filter: blur(10px); }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .section-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    
+    table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 12px 16px; text-align: left; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    td { padding: 16px; font-size: 14px; border-bottom: 1px solid rgba(51, 65, 85, 0.3); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
     /* BADGES */
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-    .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
-    .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
-    .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
-    .badge-info { background: rgba(0,212,255,0.15); color: var(--accent); }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+    .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+    .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .badge-info { background: rgba(14, 165, 233, 0.15); color: var(--accent); }
 
-    /* TOGGLE */
-    .toggle { position: relative; width: 44px; height: 24px; display: inline-block; }
+    /* TOGGLE SWITCH */
+    .toggle { position: relative; width: 48px; height: 26px; display: inline-block; }
     .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #2d3748; border-radius: 24px; transition: 0.3s; }
-    .toggle-slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
-    input:checked + .toggle-slider { background: var(--accent); }
-    input:checked + .toggle-slider:before { transform: translateX(20px); }
+    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #334155; border-radius: 26px; transition: 0.4s; }
+    .toggle-slider:before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.4s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    input:checked + .toggle-slider { background: var(--success); }
+    input:checked + .toggle-slider:before { transform: translateX(22px); }
 
-    /* INPUTS */
+    /* INPUTS & FORMS */
     input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, input[type="time"] {
-      background: #0d1a2d; border: 1px solid var(--border); border-radius: 10px;
-      padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: border-color 0.15s;
+      background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 12px;
+      padding: 12px 16px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: all 0.2s ease;
     }
-    input:focus, select:focus { border-color: var(--accent); }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); background: rgba(15, 23, 42, 0.9); }
+    ::placeholder { color: var(--muted); }
 
-    /* BUTTONS */
-    .btn { padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; border: none; transition: opacity 0.15s; }
-    .btn:hover { opacity: 0.85; }
-    .btn-primary { background: var(--accent); color: var(--bg); }
-    .btn-danger { background: var(--danger); color: white; }
-    .btn-success { background: var(--success); color: white; }
-    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    /* PROFESSIONAL BUTTONS */
+    .btn { 
+      padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; 
+      cursor: pointer; border: none; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .btn-primary { background: var(--accent-gradient); color: #fff; box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3); }
+    .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
+    .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
+    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid rgba(14, 165, 233, 0.3); }
+    .btn-ghost:hover { background: rgba(14, 165, 233, 0.1); border-color: var(--accent); }
+    .btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
 
-    /* MAP */
-    .map-placeholder { background: #0d1a2d; border-radius: 12px; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); border: 1px dashed var(--border); }
-    #map-iframe { width: 100%; height: 300px; border-radius: 12px; border: none; display: none; }
+    /* MAP CONTAINER */
+    .map-placeholder { 
+      background: rgba(15, 23, 42, 0.5); border-radius: 16px; height: 350px; 
+      display: flex; flex-direction: column; align-items: center; justify-content: center; 
+      gap: 16px; color: var(--muted); border: 2px dashed var(--border); 
+    }
+    #map-view { width: 100%; height: 450px; border-radius: 16px; border: 1px solid var(--border); z-index: 1; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 
     /* LOADER */
     .loader { display: flex; justify-content: center; padding: 40px; }
-    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* MODAL */
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 999; justify-content: center; align-items: center; }
-    .modal-overlay.open { display: flex; }
-    .modal { background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 440px; border: 1px solid var(--border); }
-    .modal-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
-    .modal-field { margin-bottom: 14px; }
-    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-    .pairing-code-display { background: #0d1a2d; border: 2px dashed var(--accent); border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; }
-    .pairing-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: var(--accent); font-family: monospace; }
-    .pairing-sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); z-index: 999; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+    .modal-overlay.open { display: flex; opacity: 1; }
+    .modal { background: #0f172a; border-radius: 24px; padding: 32px; width: 100%; max-width: 460px; border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-title { font-size: 22px; font-weight: 800; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+    .modal-field { margin-bottom: 20px; }
+    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-actions { display: flex; gap: 12px; margin-top: 28px; }
+    
+    .pairing-code-display { background: rgba(15, 23, 42, 0.8); border: 2px dashed var(--accent); border-radius: 16px; padding: 24px; text-align: center; margin: 20px 0; }
+    .pairing-code { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: var(--accent); font-family: monospace; text-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
+    .pairing-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
 
-    /* LIVE MONITOR */
-    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
-    .live-card { background: #0d1a2d; border-radius: 16px; padding: 20px; border: 1px solid var(--border); text-align: center; cursor: pointer; transition: all 0.2s; }
-    .live-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .live-card.active { border-color: var(--success); background: rgba(34,197,94,0.05); }
-    .live-icon { font-size: 36px; margin-bottom: 10px; }
-    .live-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-    .live-status { font-size: 12px; color: var(--muted); }
-    .live-status.on { color: var(--success); font-weight: 600; }
-    .stream-area { background: #000; border-radius: 12px; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; margin-top: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
-    .stream-area img { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
+    /* LIVE MONITOR DASHBOARD */
+    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
+    .live-card { 
+      background: var(--card); border-radius: 20px; padding: 24px; border: 1px solid var(--border); 
+      text-align: center; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); backdrop-filter: blur(8px);
+    }
+    .live-card:hover { border-color: rgba(14, 165, 233, 0.5); transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    .live-card.active { border-color: var(--success); background: rgba(16, 185, 129, 0.05); box-shadow: 0 0 0 1px var(--success); }
+    .live-icon { font-size: 40px; margin-bottom: 16px; display: inline-block; transition: transform 0.2s; }
+    .live-card:hover .live-icon { transform: scale(1.1); }
+    .live-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .live-status { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .live-status.on { color: var(--success); font-weight: 700; text-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+    
+    .stream-area { 
+      background: #000; border-radius: 16px; min-height: 400px; display: flex; align-items: center; justify-content: center; 
+      color: var(--muted); font-size: 15px; margin-top: 20px; border: 1px solid var(--border); position: relative; overflow: hidden;
+      box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
+    }
+    .stream-area img { width: 100%; height: 100%; object-fit: contain; border-radius: 16px; }
 
-    /* REPORT BARS */
-    .app-bar-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(30,58,95,0.4); }
-    .app-bar-row:last-child { border-bottom: none; }
-    .app-bar-fill { height: 8px; border-radius: 4px; background: var(--accent); transition: width 0.4s; }
-    .app-bar-bg { flex: 1; background: #0d1a2d; border-radius: 4px; height: 8px; overflow: hidden; }
+    /* RESPONSIVE DESIGN (MOBILE & TABLET AUTO-FIT) */
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .live-grid { grid-template-columns: repeat(2, 1fr); }
+    }
 
     @media (max-width: 768px) {
-      .sidebar { width: 60px; }
-      .sidebar-logo-text, .nav-label, .sidebar-logo-sub { display: none; }
-      .main { margin-left: 60px; padding: 16px; }
-      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .sidebar { width: 72px; padding: 16px 0; }
+      .sidebar-logo-text, .sidebar-logo-sub, .nav-label { display: none; }
+      .sidebar-logo { padding: 0 0 20px 0; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
+      .sidebar-logo::before { content: '🛡️'; font-size: 28px; }
+      
+      .nav-item { justify-content: center; padding: 16px 0; border-left: none; border-right: 3px solid transparent; }
+      .nav-item.active { border-left: none; border-right-color: var(--accent); }
+      .nav-icon { margin: 0; font-size: 24px; }
+      
+      .main { margin-left: 72px; padding: 16px; }
+      
+      .stats-grid { grid-template-columns: 1fr; gap: 12px; }
+      .stat-card { padding: 16px; border-radius: 16px; }
+      
+      .live-grid { grid-template-columns: 1fr; }
+      
+      .section { padding: 16px; border-radius: 16px; }
+      .section-header { flex-direction: column; align-items: flex-start; }
+      .section-header button, .section-header div { width: 100%; }
+      .section-header .btn { width: auto; flex: 1; }
+      
+      .children-tabs { gap: 8px; margin-bottom: 20px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .child-tab { white-space: nowrap; }
+      
+      #map-view, .map-placeholder { height: 300px; }
+      .stream-area { min-height: 250px; }
+      
+      .modal { padding: 24px; margin: 16px; border-radius: 20px; }
     }
   </style>
 </head>
@@ -7968,17 +7995,17 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
         <div class="pairing-code" id="pairing-code-text">------</div>
         <div class="pairing-sub">Enter this code in KidShield app on child's phone</div>
       </div>
-      <div style="background:#0d1a2d;border-radius:10px;padding:14px;margin-bottom:16px">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Steps for child's phone:</p>
-        <p style="font-size:13px;margin-bottom:4px">1. Open KidShield app</p>
-        <p style="font-size:13px;margin-bottom:4px">2. Tap "Enter Pairing Code"</p>
-        <p style="font-size:13px;margin-bottom:4px">3. Enter the code above</p>
+      <div style="background:rgba(15, 23, 42, 0.6);border-radius:12px;padding:16px;margin-bottom:16px; border:1px solid var(--border)">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Steps for child's phone:</p>
+        <p style="font-size:13px;margin-bottom:6px">1. Open KidShield app</p>
+        <p style="font-size:13px;margin-bottom:6px">2. Tap "Enter Pairing Code"</p>
+        <p style="font-size:13px;margin-bottom:6px">3. Enter the code above</p>
         <p style="font-size:13px;">4. Enable all permissions</p>
       </div>
-      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:12px;background:#0d1a2d;border-radius:10px">
+      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:14px;font-weight:500;padding:16px;background:rgba(15, 23, 42, 0.6);border-radius:12px;border:1px solid var(--border)">
         ⏳ Waiting for child device to connect...
       </div>
-      <div class="modal-actions" style="margin-top:16px">
+      <div class="modal-actions" style="margin-top:20px">
         <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
       </div>
     </div>
@@ -8003,9 +8030,9 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
     </div>
     <div class="modal-field">
       <label>Weekend limit different?</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
         <label class="toggle"><input type="checkbox" id="weekend-different"><span class="toggle-slider"></span></label>
-        <span style="font-size:13px;color:var(--muted)">Enable separate weekend limit</span>
+        <span style="font-size:13px;color:var(--text);font-weight:500">Enable separate weekend limit</span>
       </div>
     </div>
     <div id="weekend-limit-field" style="display:none" class="modal-field">
@@ -8025,7 +8052,7 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
       <div class="sidebar-logo-text">🛡️ KidShield</div>
       <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
     </div>
-    <nav style="flex:1;display:flex;flex-direction:column;gap:2px;">
+    <nav style="flex:1;display:flex;flex-direction:column;gap:4px;">
       <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
         <span class="nav-icon">🏠</span><span class="nav-label">Overview</span>
       </div>
@@ -8081,7 +8108,7 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
         </div>
         <div class="stat-card">
           <div class="stat-icon">📍</div>
-          <div class="stat-val" id="stat-location" style="font-size:16px;margin-top:4px">--</div>
+          <div class="stat-val" id="stat-location" style="font-size:18px;margin-top:6px;word-break:break-word;line-height:1.2;">--</div>
           <div class="stat-lbl">Current Location</div>
         </div>
       </div>
@@ -8099,20 +8126,21 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📍 Real-time Location</h3>
-          <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
+          <span id="location-updated" style="color:var(--accent);font-size:13px;font-weight:600;background:rgba(14,165,233,0.1);padding:4px 10px;border-radius:12px;">--</span>
         </div>
         <div id="map-area" class="map-placeholder">
-          <span style="font-size:48px">🗺️</span>
-          <p>Select a child to view location</p>
-          <p id="location-coords" style="font-size:13px;color:var(--accent)"></p>
+          <span style="font-size:48px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3))">🗺️</span>
+          <p style="font-weight:500">Select a child to view location</p>
+          <p id="location-coords" style="font-size:14px;color:var(--accent);font-family:monospace;"></p>
         </div>
-        <iframe id="map-iframe" allowfullscreen></iframe>
+        <div id="map-view"></div>
       </div>
     </div>
 
     <div id="section-live" style="display:none">
-      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#fca5a5;">
-        ⚠️ <strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.
+      <div style="background:rgba(239, 68, 68, 0.1);border:1px solid rgba(239, 68, 68, 0.3);border-left:4px solid var(--danger);border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:14px;color:#fca5a5;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:24px">⚠️</span> 
+        <div><strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.</div>
       </div>
       <div class="live-grid">
         <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
@@ -8134,12 +8162,13 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
       <div class="section">
         <div class="section-header">
           <h3 class="section-title" id="live-section-title">📹 Live Feed</h3>
-          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">⏹ Stop</button>
+          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none;box-shadow:0 4px 10px rgba(239,68,68,0.4);">⏹ Stop Feed</button>
         </div>
-        <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
-          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-             <p style="color:var(--muted)">Select a feature above to start monitoring</p>
+        <div class="stream-area" id="stream-area">
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:16px;right:16px;z-index:10;display:none;box-shadow:0 4px 10px rgba(0,0,0,0.5);" onclick="toggleAudioStream()">Turn Audio ON</button>
+          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+             <span style="font-size:32px;opacity:0.5">📡</span>
+             <p style="color:var(--muted);font-weight:500;">Select a feature above to start monitoring</p>
           </div>
         </div>
       </div>
@@ -8149,8 +8178,8 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📱 Installed Apps</h3>
-          <div style="display:flex;gap:10px;align-items:center">
-            <input type="text" placeholder="Search apps..." style="width:180px" oninput="filterApps(this.value)" />
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <input type="text" placeholder="Search apps..." style="width:200px;background:rgba(15,23,42,0.8);" oninput="filterApps(this.value)" />
             <button class="btn btn-ghost btn-sm" onclick="loadApps()">Refresh</button>
           </div>
         </div>
@@ -8165,27 +8194,27 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
           <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">✏️ Edit Limits</button>
         </div>
         <div id="screentime-info">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
-              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Daily Limit</div>
-              <div style="font-size:28px;font-weight:900" id="st-daily-limit">--</div>
-              <div style="font-size:12px;color:var(--muted)">hours per day</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:20px;margin-bottom:24px">
+            <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Daily Limit</div>
+              <div style="font-size:36px;font-weight:900;color:var(--accent);" id="st-daily-limit">--</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:4px;">hours per day</div>
             </div>
-            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
-              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Bedtime</div>
-              <div style="font-size:22px;font-weight:900" id="st-bedtime">--</div>
-              <div style="font-size:12px;color:var(--muted)">phone locked during this time</div>
+            <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Bedtime</div>
+              <div style="font-size:28px;font-weight:900;color:var(--accent2);" id="st-bedtime">--</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:4px;">phone locked during this time</div>
             </div>
           </div>
-          <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
-            <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Today's Usage</div>
-            <div style="display:flex;align-items:center;gap:16px">
-              <div style="flex:1">
-                <div style="background:var(--border);border-radius:8px;height:16px;overflow:hidden">
-                  <div id="usage-bar" style="height:100%;background:var(--accent);border-radius:8px;transition:width 0.5s;width:0%"></div>
+          <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
+            <div style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;">Today's Usage</div>
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:200px;">
+                <div style="background:rgba(51, 65, 85, 0.5);border-radius:10px;height:20px;overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,0.2);">
+                  <div id="usage-bar" style="height:100%;background:var(--accent-gradient);border-radius:10px;transition:width 0.8s cubic-bezier(0.4, 0, 0.2, 1);width:0%;box-shadow:0 0 10px rgba(14,165,233,0.5);"></div>
                 </div>
               </div>
-              <span id="usage-text" style="font-size:13px;color:var(--muted);white-space:nowrap">0h 0m used</span>
+              <span id="usage-text" style="font-size:15px;color:var(--text);font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.05);padding:6px 12px;border-radius:8px;">0h 0m used</span>
             </div>
           </div>
         </div>
@@ -8195,17 +8224,17 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
     <div id="section-filter" style="display:none">
       <div class="section">
         <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
-        <div style="margin-bottom:24px">
-          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Category Blocks</h4>
+        <div style="margin-bottom:32px">
+          <h4 style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:8px;">Category Blocks</h4>
           <div id="category-toggles"><div class="loader"><div class="spinner"></div></div></div>
         </div>
         <div>
-          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Custom Blocked Domains</h4>
-          <div style="display:flex;gap:10px;margin-bottom:12px">
-            <input type="text" id="new-domain" placeholder="e.g. example.com" style="flex:1" onkeypress="if(event.key==='Enter')blockDomain()" />
+          <h4 style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:8px;">Custom Blocked Domains</h4>
+          <div style="display:flex;gap:12px;margin-bottom:20px;max-width:500px;">
+            <input type="text" id="new-domain" placeholder="e.g. example.com" style="flex:1;background:rgba(15,23,42,0.8);" onkeypress="if(event.key==='Enter')blockDomain()" />
             <button class="btn btn-primary" onclick="blockDomain()">Block</button>
           </div>
-          <div id="blocked-domains-list"><div class="loader"><div class="spinner"></div></div></div>
+          <div id="blocked-domains-list" style="background:rgba(15,23,42,0.4);border-radius:12px;padding:10px;"><div class="loader"><div class="spinner"></div></div></div>
         </div>
       </div>
     </div>
@@ -8230,8 +8259,8 @@ export const checkYouTubeTimeLimit = async (childId, dailyLimitMinutes) => {
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">🔔 All Alerts</h3>
-          <div style="display:flex;gap:8px">
-            <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:8px 12px">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:10px 16px;background:rgba(15,23,42,0.8);border-radius:10px;">
               <option value="">All Types</option>
               <option value="blocked_site">Blocked Sites</option>
               <option value="blocked_app">Blocked Apps</option>
@@ -8281,6 +8310,10 @@ let socket = null;
 let isAudioActive = false;
 let audioListenerAttached = false; 
 
+// 🔥 Leaflet Map Globals
+let mapInstance = null;
+let mapMarker = null;
+
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
 const LIVE_TIMEOUT_MS = 15000;
 
@@ -8314,10 +8347,10 @@ async function sendCommand(command, data = {}) {
            if(liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
            const sContent = document.getElementById('stream-content');
            if(sContent) {
-               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);">
-                   <span style="font-size:30px;">⚠️</span><br/><br/>
-                   <b style="font-size:16px;">App Execution Error</b><br/><br/>
-                   <div style="text-align:left; font-size:13px; color:#fca5a5;">
+               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 16px; background: rgba(239,68,68,0.1);backdrop-filter:blur(5px);">
+                   <span style="font-size:36px;text-shadow:0 0 20px rgba(239,68,68,0.5);">⚠️</span><br/><br/>
+                   <b style="font-size:18px;">App Execution Error</b><br/><br/>
+                   <div style="text-align:left; font-size:14px; color:#fca5a5;background:rgba(0,0,0,0.3);padding:16px;border-radius:12px;">
                        <b>Exact Error from Phone:</b><br/>${exactError}<br/><br/>
                        <b>Action Required:</b> Open the app on the child phone, ensure all permissions are granted, and try again.
                    </div>
@@ -8381,7 +8414,7 @@ function initSocket(userId) {
     streamContent.innerHTML = `
       <img
         src="data:image/jpeg;base64,${data.frameBase64}"
-        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:12px;"
+        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.5);"
         onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
       />`;
 
@@ -8390,7 +8423,7 @@ function initSocket(userId) {
       statusEl.textContent = 'Live ●';
       statusEl.className = 'live-status on';
     }
-    document.getElementById('audio-toggle-btn').style.display = 'block';
+    document.getElementById('audio-toggle-btn').style.display = 'inline-flex';
   });
 
   attachAudioListener();
@@ -8425,7 +8458,7 @@ function toggleLive(mode) {
 
   document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
   document.getElementById('card-' + mode)?.classList.add('active');
-  document.getElementById('btn-stop-live').style.display = 'block';
+  document.getElementById('btn-stop-live').style.display = 'inline-flex';
 
   const titles = { screen: '🖥️ Screen Mirror — Live', camera_back: '📷 Back Camera — Live', camera_front: '🤳 Front Camera — Live' };
   document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
@@ -8433,8 +8466,9 @@ function toggleLive(mode) {
   const streamContent = document.getElementById('stream-content');
   streamContent.innerHTML = `
     <div style="text-align:center;padding:40px">
-      <div class="spinner" style="margin:0 auto 16px"></div>
-      <p style="color:var(--muted)">Connecting via WebSockets...</p>
+      <div class="spinner" style="margin:0 auto 20px"></div>
+      <p style="color:var(--text);font-weight:500;">Connecting via WebSockets...</p>
+      <p style="color:var(--muted);font-size:13px;margin-top:8px;">Please wait while we establish a secure connection</p>
     </div>`;
 
   document.getElementById('audio-toggle-btn').style.display = 'none';
@@ -8445,13 +8479,13 @@ function toggleLive(mode) {
     const sContent = document.getElementById('stream-content');
     if (sContent) {
       sContent.innerHTML = `
-        <div style="text-align:center;padding:40px;color:#ef4444;">
-          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
-          <div style="font-size:18px;font-weight:700;margin-bottom:12px">Connection Timeout</div>
-          <div style="font-size:13px;color:#fca5a5;max-width:320px;margin:0 auto">
+        <div style="text-align:center;padding:40px;color:#ef4444;background:rgba(239,68,68,0.05);border-radius:16px;">
+          <div style="font-size:56px;margin-bottom:16px;text-shadow:0 0 20px rgba(239,68,68,0.3);">⚠️</div>
+          <div style="font-size:20px;font-weight:800;margin-bottom:16px">Connection Timeout</div>
+          <div style="font-size:14px;color:#fca5a5;max-width:320px;margin:0 auto;background:rgba(0,0,0,0.2);padding:16px;border-radius:12px;text-align:left;">
             1. App is closed/killed<br>2. Internet is OFF<br>3. Permissions denied
           </div>
-          <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">Retry</button>
+          <button onclick="toggleLive('${mode}')" class="btn btn-primary" style="margin-top:24px">Retry Connection</button>
         </div>`;
     }
     const statusEl = document.getElementById('status-' + mode);
@@ -8477,11 +8511,11 @@ function stopAllLive() {
 
   document.getElementById('btn-stop-live').style.display = 'none';
   document.getElementById('audio-toggle-btn').style.display = 'none';
-  document.getElementById('audio-toggle-btn').textContent = 'Turn Audio ON';
+  document.getElementById('audio-toggle-btn').innerHTML = 'Turn Audio ON';
   document.getElementById('audio-toggle-btn').className = 'btn btn-primary btn-sm';
 
   const streamContent = document.getElementById('stream-content');
-  if (streamContent) streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
+  if (streamContent) streamContent.innerHTML = '<span style="font-size:32px;opacity:0.5;margin-bottom:12px;">📡</span><p style="color:var(--muted);font-weight:500;">Select a feature above to start monitoring</p>';
   document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
 }
 
@@ -8490,11 +8524,11 @@ function toggleAudioStream() {
   isAudioActive = !isAudioActive;
   const btn = document.getElementById('audio-toggle-btn');
   if (isAudioActive) {
-    btn.textContent = '🔇 Mute Audio';
+    btn.innerHTML = '🔇 Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'audio_' + Date.now() });
   } else {
-    btn.textContent = 'Turn Audio ON';
+    btn.innerHTML = 'Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -8567,7 +8601,7 @@ async function loadChildren() {
       const tab = document.createElement('div');
       const isActive = currentChildId === child.id;
       tab.className = 'child-tab' + (isActive ? ' active' : '');
-      tab.innerHTML = (child.emoji || '👦') + ' ' + child.name;
+      tab.innerHTML = (child.emoji || '👦') + ' <span>' + child.name + '</span>';
       tab.onclick = () => selectChild(child.id, tab);
       tabsEl.appendChild(tab);
     });
@@ -8578,7 +8612,7 @@ async function loadChildren() {
       if (firstTab) firstTab.classList.add('active');
       loadChildData();
     } else if (!firstChild) {
-      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:4px 8px;">No children yet —</span>';
+      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:8px 16px;background:rgba(255,255,255,0.05);border-radius:20px;">No children yet —</span>';
     }
   } catch (err) { console.error(err); }
 
@@ -8703,11 +8737,11 @@ async function loadActivity() {
   try {
     const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('activity').orderBy('timestamp','desc').limit(15).get();
     const el = document.getElementById('activity-list');
-    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;">No activity yet</p>'; return; }
+    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;background:rgba(255,255,255,0.02);border-radius:12px;">No activity yet</p>'; return; }
     el.innerHTML = '<table><tbody>' + snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleTimeString() || '--';
-      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type||'--'}</td><td>${d.details||'--'}</td></tr>`;
+      return `<tr><td style="color:var(--muted);font-size:13px;font-weight:500;width:120px;">${time}</td><td><span class="badge badge-info">${d.type||'--'}</span></td><td style="color:var(--text);">${d.details||'--'}</td></tr>`;
     }).join('') + '</tbody></table>';
   } catch(e) {}
 }
@@ -8726,10 +8760,10 @@ async function loadApps() {
 }
 function filterApps(q) {
   const filtered = allApps.filter(a => (a.appName||a.id).toLowerCase().includes(q.toLowerCase()));
-  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:20px">No apps</p>'; return; }
+  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:24px;background:rgba(255,255,255,0.02);border-radius:12px;text-align:center;">No apps found</p>'; return; }
   document.getElementById('apps-list').innerHTML = '<table><tbody>' + filtered.map(app => {
-    return `<tr><td><b>${app.appName||app.id}</b></td>
-    <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
+    return `<tr><td style="font-size:15px;"><b>${app.appName||app.id}</b></td>
+    <td style="text-align:right;"><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
   }).join('') + '</tbody></table>';
 }
 async function toggleApp(appId, blocked) {
@@ -8740,7 +8774,7 @@ async function loadFilter() { loadBlockedDomains(); }
 async function loadBlockedDomains() {
   if (!currentChildId) return;
   const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').get();
-  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">🚫 ${d.id} <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p>No blocked domains</p>';
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:12px 16px;border-bottom:1px solid rgba(51, 65, 85, 0.3);display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:500;"><span style="opacity:0.6;margin-right:8px;">🚫</span> ${d.id}</span> <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p style="padding:16px;color:var(--muted);">No blocked domains</p>';
 }
 async function blockDomain() {
   const domain = document.getElementById('new-domain').value.trim().toLowerCase();
@@ -8755,17 +8789,49 @@ function closeTimeLimitModal() { document.getElementById('modal-time-limit').cla
 async function saveTimeLimits() { closeTimeLimitModal(); }
 function loadScreenTimeSection() {}
 
+// 🔥 UPDATED LOCATION LOGIC (Leaflet.js)
 function loadLocation() {
   if (!currentChildId) return;
   if (locationUnsubscribe) locationUnsubscribe();
+  
   locationUnsubscribe = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).onSnapshot(doc => {
     const data = doc.data() || {};
     if (data.location && data.location.lat) {
-      document.getElementById('location-coords').textContent = `${data.location.lat}, ${data.location.lng}`;
+      const lat = data.location.lat;
+      const lng = data.location.lng;
+
+      document.getElementById('location-coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      if (data.locationUpdatedAt) {
+         document.getElementById('location-updated').textContent = new Date(data.locationUpdatedAt.toDate()).toLocaleTimeString();
+      }
+      
       document.getElementById('map-area').style.display = 'none';
-      const mapFrame = document.getElementById('map-iframe');
-      mapFrame.style.display = 'block';
-      mapFrame.src = `https://www.openstreetmap.org/export/embed.html?bbox=${data.location.lng-0.005}%2C${data.location.lat-0.005}%2C${data.location.lng+0.005}%2C${data.location.lat+0.005}&layer=mapnik&marker=${data.location.lat}%2C${data.location.lng}`;
+      
+      const mapView = document.getElementById('map-view');
+      mapView.style.display = 'block';
+      
+      if (!mapInstance) {
+        mapInstance = L.map('map-view').setView([lat, lng], 15);
+        
+        const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri' });
+        const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenTopoMap' });
+
+        streetLayer.addTo(mapInstance);
+        
+        const baseMaps = {
+            "🌍 Default Map": streetLayer,
+            "🛰️ Satellite View": satelliteLayer,
+            "⛰️ Terrain View": terrainLayer
+        };
+        L.control.layers(baseMaps).addTo(mapInstance);
+        
+        mapMarker = L.marker([lat, lng]).addTo(mapInstance);
+		setTimeout(() => { mapInstance.invalidateSize(); }, 500);
+      } else {
+        mapInstance.setView([lat, lng], mapInstance.getZoom());
+        mapMarker.setLatLng([lat, lng]);
+      }
     }
   });
 }
@@ -8776,7 +8842,7 @@ async function loadAlerts() {
   let query = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('alerts').orderBy('timestamp', 'desc').limit(30);
   if(filterVal) query = query.where('type', '==', filterVal);
   const snap = await query.get();
-  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td>${d.data().type}</td><td>${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:20px">No alerts</p>';
+  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td style="width:150px;"><span class="badge badge-warning">${d.data().type}</span></td><td style="font-weight:500;">${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:24px;text-align:center;color:var(--muted);background:rgba(255,255,255,0.02);border-radius:12px;">No alerts</p>';
 }
 </script>
 </body>

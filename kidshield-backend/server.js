@@ -229,8 +229,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('❌ Client Disconnected:', socket.id);
+  // 🔥 FIX: Keep-Alive Ping Endpoint
+  socket.on('ping', (data) => {
+    // Just acknowledges the ping from the client to keep socket alive
+  });
+
+  // 🔥 FIX: Auto-Stop Logic when parent/child disconnects
+  socket.on('disconnecting', () => {
+    // Find which rooms this socket was part of
+    for (const room of socket.rooms) {
+      if (room !== socket.id) {
+        // Tell everyone else in this room that a connection was lost
+        // If parent closes browser, this tells the child app to stop streaming
+        socket.to(room).emit('force_stop_streams');
+      }
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ Client Disconnected: ${socket.id} | Reason: ${reason}`);
   });
 });
 

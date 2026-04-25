@@ -14,249 +14,136 @@
 
   <style>
     :root {
-      /* Modern Deep Blue Theme */
-      --bg: #030712; 
-      --bg-gradient: linear-gradient(135deg, #030712 0%, #0f172a 100%);
-      --card: rgba(17, 24, 39, 0.7); 
-      --card-hover: rgba(31, 41, 55, 0.8);
-      --accent: #0ea5e9; 
-      --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
-      --accent2: #8b5cf6;
-      --success: #10b981; 
-      --danger: #ef4444; 
-      --warning: #f59e0b;
-      --text: #f8fafc; 
-      --muted: #94a3b8; 
-      --border: rgba(51, 65, 85, 0.5);
+      --bg: #060b14; --card: #111d35; --accent: #00d4ff; --accent2: #7c3aed;
+      --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+      --text: #ffffff; --muted: #8899aa; --border: #1e3a5f;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
-    
-    body { 
-      background: var(--bg-gradient); 
-      color: var(--text); 
-      min-height: 100vh; 
-      background-attachment: fixed;
-    }
-
-    /* CUSTOM SCROLLBAR FOR PROFESSIONAL LOOK */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
 
     /* LOGIN */
     #login-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .login-card { 
-      background: var(--card); 
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-radius: 24px; 
-      padding: 40px; 
-      width: 100%; 
-      max-width: 420px; 
-      border: 1px solid var(--border);
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    }
-    .login-logo { font-size: 56px; text-align: center; margin-bottom: 12px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
-    .login-title { font-size: 28px; font-weight: 800; text-align: center; margin-bottom: 6px; letter-spacing: -0.5px; }
+    .login-card { background: var(--card); border-radius: 24px; padding: 40px; width: 100%; max-width: 400px; border: 1px solid var(--border); }
+    .login-logo { font-size: 48px; text-align: center; margin-bottom: 8px; }
+    .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 4px; }
     .login-sub { color: var(--muted); text-align: center; margin-bottom: 32px; font-size: 14px; }
 
-    /* APP LAYOUT */
+    /* APP */
     #app { display: none; }
-    .sidebar { 
-      position: fixed; left: 0; top: 0; width: 240px; height: 100vh; 
-      background: rgba(15, 23, 42, 0.95); 
-      backdrop-filter: blur(10px);
-      border-right: 1px solid var(--border); 
-      padding: 24px 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
-      transition: width 0.3s ease;
-    }
-    .sidebar-logo { padding: 0 24px 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-    .sidebar-logo-text { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
-    .sidebar-logo-sub { color: var(--muted); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    
-    .nav-item { 
-      display: flex; align-items: center; gap: 12px; padding: 14px 24px; 
-      cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500;
-      transition: all 0.2s ease; border-left: 4px solid transparent; 
-    }
-    .nav-item:hover { background: rgba(14, 165, 233, 0.08); color: var(--text); }
-    .nav-item.active { 
-      background: rgba(14, 165, 233, 0.15); 
-      color: var(--accent); 
-      border-left-color: var(--accent); 
-      font-weight: 600;
-    }
-    .nav-icon { font-size: 20px; min-width: 24px; text-align: center; transition: transform 0.2s; }
-    .nav-item:hover .nav-icon { transform: scale(1.1); }
+    .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: var(--card); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; }
+    .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .sidebar-logo-text { font-size: 18px; font-weight: 900; }
+    .sidebar-logo-sub { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; transition: all 0.15s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: rgba(0,212,255,0.05); color: var(--text); }
+    .nav-item.active { background: rgba(0,212,255,0.1); color: var(--accent); border-left-color: var(--accent); }
+    .nav-icon { font-size: 18px; min-width: 22px; text-align: center; }
     .nav-logout { margin-top: auto; }
-    .nav-logout:hover { color: var(--danger) !important; background: rgba(239, 68, 68, 0.1); }
-    
-    .main { margin-left: 240px; padding: 32px; min-height: 100vh; transition: margin-left 0.3s ease; }
+    .nav-logout:hover { color: var(--danger) !important; }
+    .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
 
     /* CHILDREN TABS */
-    .children-tabs { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; align-items: center; }
-    .child-tab { 
-      background: var(--card); border: 1px solid var(--border); border-radius: 40px; 
-      padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); 
-      transition: all 0.2s ease; backdrop-filter: blur(8px); display: flex; align-items: center; gap: 8px;
-    }
-    .child-tab:hover { border-color: rgba(14, 165, 233, 0.5); color: var(--text); transform: translateY(-2px); }
-    .child-tab.active { 
-      background: var(--accent-gradient); color: #fff; border-color: transparent; 
-      box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-    }
-    .child-tab-add { border-style: dashed !important; background: transparent; }
-    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; transform: none; }
+    .children-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+    .child-tab { background: var(--card); border: 2px solid transparent; border-radius: 40px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); transition: all 0.15s; }
+    .child-tab.active { border-color: var(--accent); color: var(--accent); }
+    .child-tab-add { border-style: dashed !important; border-color: var(--border) !important; }
+    .child-tab-add:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
-    /* STATS DASHBOARD */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px; }
-    .stat-card { 
-      background: var(--card); border-radius: 20px; padding: 24px; 
-      border: 1px solid var(--border); position: relative; overflow: hidden;
-      backdrop-filter: blur(10px); transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
-    .stat-icon { font-size: 32px; margin-bottom: 16px; display: inline-block; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 16px; }
-    .stat-val { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; }
-    .stat-lbl { color: var(--muted); font-size: 13px; font-weight: 500; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .stat-badge { position: absolute; top: 20px; right: 20px; font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 700; letter-spacing: 0.5px; }
-    .stat-badge-online { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
-    .stat-badge-offline { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    /* STATS */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stat-icon { font-size: 28px; margin-bottom: 12px; }
+    .stat-val { font-size: 26px; font-weight: 900; }
+    .stat-lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .stat-badge { position: absolute; top: 14px; right: 14px; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+    .stat-badge-online { background: rgba(34,197,94,0.15); color: var(--success); }
+    .stat-badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
 
     /* SECTIONS */
-    .section { background: var(--card); border-radius: 20px; padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); backdrop-filter: blur(10px); }
-    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .section-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    
-    table { width: 100%; border-collapse: separate; border-spacing: 0; }
-    th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 12px 16px; text-align: left; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-    td { padding: 16px; font-size: 14px; border-bottom: 1px solid rgba(51, 65, 85, 0.3); vertical-align: middle; }
+    .section { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+    .section-title { font-size: 16px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(30,58,95,0.5); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
     /* BADGES */
-    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-    .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-    .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-    .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
-    .badge-info { background: rgba(14, 165, 233, 0.15); color: var(--accent); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
+    .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .badge-info { background: rgba(0,212,255,0.15); color: var(--accent); }
 
-    /* TOGGLE SWITCH */
-    .toggle { position: relative; width: 48px; height: 26px; display: inline-block; }
+    /* TOGGLE */
+    .toggle { position: relative; width: 44px; height: 24px; display: inline-block; }
     .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #334155; border-radius: 26px; transition: 0.4s; }
-    .toggle-slider:before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.4s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-    input:checked + .toggle-slider { background: var(--success); }
-    input:checked + .toggle-slider:before { transform: translateX(22px); }
+    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #2d3748; border-radius: 24px; transition: 0.3s; }
+    .toggle-slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+    input:checked + .toggle-slider { background: var(--accent); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
 
-    /* INPUTS & FORMS */
+    /* INPUTS */
     input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, input[type="time"] {
-      background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 12px;
-      padding: 12px 16px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: all 0.2s ease;
+      background: #0d1a2d; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; outline: none; transition: border-color 0.15s;
     }
-    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); background: rgba(15, 23, 42, 0.9); }
-    ::placeholder { color: var(--muted); }
+    input:focus, select:focus { border-color: var(--accent); }
 
-    /* PROFESSIONAL BUTTONS */
-    .btn { 
-      padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; 
-      cursor: pointer; border: none; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    }
-    .btn:active { transform: scale(0.96); }
-    .btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    .btn-primary { background: var(--accent-gradient); color: #fff; box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3); }
-    .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
-    .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
-    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid rgba(14, 165, 233, 0.3); }
-    .btn-ghost:hover { background: rgba(14, 165, 233, 0.1); border-color: var(--accent); }
-    .btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
+    /* BUTTONS */
+    .btn { padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; border: none; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
 
-    /* MAP CONTAINER */
-    .map-placeholder { 
-      background: rgba(15, 23, 42, 0.5); border-radius: 16px; height: 350px; 
-      display: flex; flex-direction: column; align-items: center; justify-content: center; 
-      gap: 16px; color: var(--muted); border: 2px dashed var(--border); 
-    }
-    #map-view { width: 100%; height: 450px; border-radius: 16px; border: 1px solid var(--border); z-index: 1; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    /* MAP */
+    .map-placeholder { background: #0d1a2d; border-radius: 12px; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); border: 1px dashed var(--border); }
+    /* 🔥 New Leaflet Map container style */
+    #map-view { width: 100%; height: 300px; border-radius: 12px; border: 1px solid var(--border); display: none; z-index: 1; }
 
     /* LOADER */
     .loader { display: flex; justify-content: center; padding: 40px; }
-    .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* MODAL */
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); z-index: 999; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
-    .modal-overlay.open { display: flex; opacity: 1; }
-    .modal { background: #0f172a; border-radius: 24px; padding: 32px; width: 100%; max-width: 460px; border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    .modal-overlay.open .modal { transform: translateY(0); }
-    .modal-title { font-size: 22px; font-weight: 800; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
-    .modal-field { margin-bottom: 20px; }
-    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .modal-actions { display: flex; gap: 12px; margin-top: 28px; }
-    
-    .pairing-code-display { background: rgba(15, 23, 42, 0.8); border: 2px dashed var(--accent); border-radius: 16px; padding: 24px; text-align: center; margin: 20px 0; }
-    .pairing-code { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: var(--accent); font-family: monospace; text-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
-    .pairing-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 999; justify-content: center; align-items: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 440px; border: 1px solid var(--border); }
+    .modal-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .pairing-code-display { background: #0d1a2d; border: 2px dashed var(--accent); border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; }
+    .pairing-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: var(--accent); font-family: monospace; }
+    .pairing-sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
 
-    /* LIVE MONITOR DASHBOARD */
-    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
-    .live-card { 
-      background: var(--card); border-radius: 20px; padding: 24px; border: 1px solid var(--border); 
-      text-align: center; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); backdrop-filter: blur(8px);
-    }
-    .live-card:hover { border-color: rgba(14, 165, 233, 0.5); transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
-    .live-card.active { border-color: var(--success); background: rgba(16, 185, 129, 0.05); box-shadow: 0 0 0 1px var(--success); }
-    .live-icon { font-size: 40px; margin-bottom: 16px; display: inline-block; transition: transform 0.2s; }
-    .live-card:hover .live-icon { transform: scale(1.1); }
-    .live-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-    .live-status { font-size: 13px; color: var(--muted); font-weight: 500; }
-    .live-status.on { color: var(--success); font-weight: 700; text-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
-    
-    .stream-area { 
-      background: #000; border-radius: 16px; min-height: 400px; display: flex; align-items: center; justify-content: center; 
-      color: var(--muted); font-size: 15px; margin-top: 20px; border: 1px solid var(--border); position: relative; overflow: hidden;
-      box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
-    }
-    .stream-area img { width: 100%; height: 100%; object-fit: contain; border-radius: 16px; }
+    /* LIVE MONITOR */
+    .live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .live-card { background: #0d1a2d; border-radius: 16px; padding: 20px; border: 1px solid var(--border); text-align: center; cursor: pointer; transition: all 0.2s; }
+    .live-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .live-card.active { border-color: var(--success); background: rgba(34,197,94,0.05); }
+    .live-icon { font-size: 36px; margin-bottom: 10px; }
+    .live-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .live-status { font-size: 12px; color: var(--muted); }
+    .live-status.on { color: var(--success); font-weight: 600; }
+    .stream-area { background: #000; border-radius: 12px; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; margin-top: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stream-area img { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
 
-    /* RESPONSIVE DESIGN (MOBILE & TABLET AUTO-FIT) */
-    @media (max-width: 1024px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .live-grid { grid-template-columns: repeat(2, 1fr); }
-    }
+    /* REPORT BARS */
+    .app-bar-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(30,58,95,0.4); }
+    .app-bar-row:last-child { border-bottom: none; }
+    .app-bar-fill { height: 8px; border-radius: 4px; background: var(--accent); transition: width 0.4s; }
+    .app-bar-bg { flex: 1; background: #0d1a2d; border-radius: 4px; height: 8px; overflow: hidden; }
 
     @media (max-width: 768px) {
-      .sidebar { width: 72px; padding: 16px 0; }
-      .sidebar-logo-text, .sidebar-logo-sub, .nav-label { display: none; }
-      .sidebar-logo { padding: 0 0 20px 0; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
-      .sidebar-logo::before { content: '🛡️'; font-size: 28px; }
-      
-      .nav-item { justify-content: center; padding: 16px 0; border-left: none; border-right: 3px solid transparent; }
-      .nav-item.active { border-left: none; border-right-color: var(--accent); }
-      .nav-icon { margin: 0; font-size: 24px; }
-      
-      .main { margin-left: 72px; padding: 16px; }
-      
-      .stats-grid { grid-template-columns: 1fr; gap: 12px; }
-      .stat-card { padding: 16px; border-radius: 16px; }
-      
-      .live-grid { grid-template-columns: 1fr; }
-      
-      .section { padding: 16px; border-radius: 16px; }
-      .section-header { flex-direction: column; align-items: flex-start; }
-      .section-header button, .section-header div { width: 100%; }
-      .section-header .btn { width: auto; flex: 1; }
-      
-      .children-tabs { gap: 8px; margin-bottom: 20px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
-      .child-tab { white-space: nowrap; }
-      
-      #map-view, .map-placeholder { height: 300px; }
-      .stream-area { min-height: 250px; }
-      
-      .modal { padding: 24px; margin: 16px; border-radius: 20px; }
+      .sidebar { width: 60px; }
+      .sidebar-logo-text, .nav-label, .sidebar-logo-sub { display: none; }
+      .main { margin-left: 60px; padding: 16px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -312,17 +199,17 @@
         <div class="pairing-code" id="pairing-code-text">------</div>
         <div class="pairing-sub">Enter this code in KidShield app on child's phone</div>
       </div>
-      <div style="background:rgba(15, 23, 42, 0.6);border-radius:12px;padding:16px;margin-bottom:16px; border:1px solid var(--border)">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Steps for child's phone:</p>
-        <p style="font-size:13px;margin-bottom:6px">1. Open KidShield app</p>
-        <p style="font-size:13px;margin-bottom:6px">2. Tap "Enter Pairing Code"</p>
-        <p style="font-size:13px;margin-bottom:6px">3. Enter the code above</p>
+      <div style="background:#0d1a2d;border-radius:10px;padding:14px;margin-bottom:16px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Steps for child's phone:</p>
+        <p style="font-size:13px;margin-bottom:4px">1. Open KidShield app</p>
+        <p style="font-size:13px;margin-bottom:4px">2. Tap "Enter Pairing Code"</p>
+        <p style="font-size:13px;margin-bottom:4px">3. Enter the code above</p>
         <p style="font-size:13px;">4. Enable all permissions</p>
       </div>
-      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:14px;font-weight:500;padding:16px;background:rgba(15, 23, 42, 0.6);border-radius:12px;border:1px solid var(--border)">
+      <div id="pairing-status" style="text-align:center;color:var(--muted);font-size:13px;padding:12px;background:#0d1a2d;border-radius:10px">
         ⏳ Waiting for child device to connect...
       </div>
-      <div class="modal-actions" style="margin-top:20px">
+      <div class="modal-actions" style="margin-top:16px">
         <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button>
       </div>
     </div>
@@ -347,9 +234,9 @@
     </div>
     <div class="modal-field">
       <label>Weekend limit different?</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
         <label class="toggle"><input type="checkbox" id="weekend-different"><span class="toggle-slider"></span></label>
-        <span style="font-size:13px;color:var(--text);font-weight:500">Enable separate weekend limit</span>
+        <span style="font-size:13px;color:var(--muted)">Enable separate weekend limit</span>
       </div>
     </div>
     <div id="weekend-limit-field" style="display:none" class="modal-field">
@@ -369,7 +256,7 @@
       <div class="sidebar-logo-text">🛡️ KidShield</div>
       <div class="sidebar-logo-sub" id="parent-email-display">Loading...</div>
     </div>
-    <nav style="flex:1;display:flex;flex-direction:column;gap:4px;">
+    <nav style="flex:1;display:flex;flex-direction:column;gap:2px;">
       <div class="nav-item active" onclick="showSection('overview')" id="nav-overview">
         <span class="nav-icon">🏠</span><span class="nav-label">Overview</span>
       </div>
@@ -425,7 +312,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon">📍</div>
-          <div class="stat-val" id="stat-location" style="font-size:18px;margin-top:6px;word-break:break-word;line-height:1.2;">--</div>
+          <div class="stat-val" id="stat-location" style="font-size:16px;margin-top:4px">--</div>
           <div class="stat-lbl">Current Location</div>
         </div>
       </div>
@@ -443,21 +330,20 @@
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📍 Real-time Location</h3>
-          <span id="location-updated" style="color:var(--accent);font-size:13px;font-weight:600;background:rgba(14,165,233,0.1);padding:4px 10px;border-radius:12px;">--</span>
+          <span id="location-updated" style="color:var(--muted);font-size:12px">--</span>
         </div>
         <div id="map-area" class="map-placeholder">
-          <span style="font-size:48px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3))">🗺️</span>
-          <p style="font-weight:500">Select a child to view location</p>
-          <p id="location-coords" style="font-size:14px;color:var(--accent);font-family:monospace;"></p>
+          <span style="font-size:48px">🗺️</span>
+          <p>Select a child to view location</p>
+          <p id="location-coords" style="font-size:13px;color:var(--accent)"></p>
         </div>
         <div id="map-view"></div>
       </div>
     </div>
 
     <div id="section-live" style="display:none">
-      <div style="background:rgba(239, 68, 68, 0.1);border:1px solid rgba(239, 68, 68, 0.3);border-left:4px solid var(--danger);border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:14px;color:#fca5a5;display:flex;align-items:center;gap:12px;">
-        <span style="font-size:24px">⚠️</span> 
-        <div><strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.</div>
+      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#fca5a5;">
+        ⚠️ <strong>Privacy Notice:</strong> Live monitoring via WebSockets active. Use responsibly.
       </div>
       <div class="live-grid">
         <div class="live-card" id="card-screen" onclick="toggleLive('screen')">
@@ -479,13 +365,12 @@
       <div class="section">
         <div class="section-header">
           <h3 class="section-title" id="live-section-title">📹 Live Feed</h3>
-          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none;box-shadow:0 4px 10px rgba(239,68,68,0.4);">⏹ Stop Feed</button>
+          <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">⏹ Stop</button>
         </div>
-        <div class="stream-area" id="stream-area">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:16px;right:16px;z-index:10;display:none;box-shadow:0 4px 10px rgba(0,0,0,0.5);" onclick="toggleAudioStream()">Turn Audio ON</button>
-          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;">
-             <span style="font-size:32px;opacity:0.5">📡</span>
-             <p style="color:var(--muted);font-weight:500;">Select a feature above to start monitoring</p>
+        <div class="stream-area" id="stream-area" style="position:relative;">
+          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
+          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+             <p style="color:var(--muted)">Select a feature above to start monitoring</p>
           </div>
         </div>
       </div>
@@ -495,8 +380,8 @@
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">📱 Installed Apps</h3>
-          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-            <input type="text" placeholder="Search apps..." style="width:200px;background:rgba(15,23,42,0.8);" oninput="filterApps(this.value)" />
+          <div style="display:flex;gap:10px;align-items:center">
+            <input type="text" placeholder="Search apps..." style="width:180px" oninput="filterApps(this.value)" />
             <button class="btn btn-ghost btn-sm" onclick="loadApps()">Refresh</button>
           </div>
         </div>
@@ -511,27 +396,27 @@
           <button class="btn btn-primary btn-sm" onclick="openTimeLimitModal()">✏️ Edit Limits</button>
         </div>
         <div id="screentime-info">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:20px;margin-bottom:24px">
-            <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
-              <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Daily Limit</div>
-              <div style="font-size:36px;font-weight:900;color:var(--accent);" id="st-daily-limit">--</div>
-              <div style="font-size:13px;color:var(--muted);margin-top:4px;">hours per day</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Daily Limit</div>
+              <div style="font-size:28px;font-weight:900" id="st-daily-limit">--</div>
+              <div style="font-size:12px;color:var(--muted)">hours per day</div>
             </div>
-            <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
-              <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Bedtime</div>
-              <div style="font-size:28px;font-weight:900;color:var(--accent2);" id="st-bedtime">--</div>
-              <div style="font-size:13px;color:var(--muted);margin-top:4px;">phone locked during this time</div>
+            <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+              <div style="color:var(--muted);font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Bedtime</div>
+              <div style="font-size:22px;font-weight:900" id="st-bedtime">--</div>
+              <div style="font-size:12px;color:var(--muted)">phone locked during this time</div>
             </div>
           </div>
-          <div style="background:rgba(15,23,42,0.6);border-radius:16px;padding:24px;border:1px solid var(--border)">
-            <div style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;">Today's Usage</div>
-            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
-              <div style="flex:1;min-width:200px;">
-                <div style="background:rgba(51, 65, 85, 0.5);border-radius:10px;height:20px;overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,0.2);">
-                  <div id="usage-bar" style="height:100%;background:var(--accent-gradient);border-radius:10px;transition:width 0.8s cubic-bezier(0.4, 0, 0.2, 1);width:0%;box-shadow:0 0 10px rgba(14,165,233,0.5);"></div>
+          <div style="background:#0d1a2d;border-radius:12px;padding:18px;border:1px solid var(--border)">
+            <div style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Today's Usage</div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <div style="flex:1">
+                <div style="background:var(--border);border-radius:8px;height:16px;overflow:hidden">
+                  <div id="usage-bar" style="height:100%;background:var(--accent);border-radius:8px;transition:width 0.5s;width:0%"></div>
                 </div>
               </div>
-              <span id="usage-text" style="font-size:15px;color:var(--text);font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.05);padding:6px 12px;border-radius:8px;">0h 0m used</span>
+              <span id="usage-text" style="font-size:13px;color:var(--muted);white-space:nowrap">0h 0m used</span>
             </div>
           </div>
         </div>
@@ -541,17 +426,17 @@
     <div id="section-filter" style="display:none">
       <div class="section">
         <div class="section-header"><h3 class="section-title">🔒 Website Filter</h3></div>
-        <div style="margin-bottom:32px">
-          <h4 style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:8px;">Category Blocks</h4>
+        <div style="margin-bottom:24px">
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Category Blocks</h4>
           <div id="category-toggles"><div class="loader"><div class="spinner"></div></div></div>
         </div>
         <div>
-          <h4 style="color:var(--text);font-size:14px;margin-bottom:16px;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:8px;">Custom Blocked Domains</h4>
-          <div style="display:flex;gap:12px;margin-bottom:20px;max-width:500px;">
-            <input type="text" id="new-domain" placeholder="e.g. example.com" style="flex:1;background:rgba(15,23,42,0.8);" onkeypress="if(event.key==='Enter')blockDomain()" />
+          <h4 style="color:var(--muted);font-size:12px;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Custom Blocked Domains</h4>
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <input type="text" id="new-domain" placeholder="e.g. example.com" style="flex:1" onkeypress="if(event.key==='Enter')blockDomain()" />
             <button class="btn btn-primary" onclick="blockDomain()">Block</button>
           </div>
-          <div id="blocked-domains-list" style="background:rgba(15,23,42,0.4);border-radius:12px;padding:10px;"><div class="loader"><div class="spinner"></div></div></div>
+          <div id="blocked-domains-list"><div class="loader"><div class="spinner"></div></div></div>
         </div>
       </div>
     </div>
@@ -576,8 +461,8 @@
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">🔔 All Alerts</h3>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:10px 16px;background:rgba(15,23,42,0.8);border-radius:10px;">
+          <div style="display:flex;gap:8px">
+            <select id="alert-filter" onchange="loadAlerts()" style="width:auto;padding:8px 12px">
               <option value="">All Types</option>
               <option value="blocked_site">Blocked Sites</option>
               <option value="blocked_app">Blocked Apps</option>
@@ -627,7 +512,7 @@ let socket = null;
 let isAudioActive = false;
 let audioListenerAttached = false; 
 
-// 🔥 Leaflet Map Globals
+// 🔥 Leaflet Map Variables
 let mapInstance = null;
 let mapMarker = null;
 
@@ -640,6 +525,19 @@ const LIVE_TIMEOUT_MS = 15000;
 async function sendCommand(command, data = {}) {
   if (!currentChildId || !currentParentId) return;
   try {
+    // 🔥 FIX: Clean up old pending commands
+    const oldCmds = await db.collection('commands')
+      .where('childId', '==', currentChildId)
+      .where('status', '==', 'pending')
+      .get();
+
+    if (!oldCmds.empty) {
+      const batch = db.batch();
+      oldCmds.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      console.log(`Cleaned up ${oldCmds.size} old pending commands.`);
+    }
+
     const cmdRef = await db.collection('commands').add({
       childId: currentChildId,
       parentId: currentParentId,
@@ -664,10 +562,10 @@ async function sendCommand(command, data = {}) {
            if(liveTimeout) { clearTimeout(liveTimeout); liveTimeout = null; }
            const sContent = document.getElementById('stream-content');
            if(sContent) {
-               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 16px; background: rgba(239,68,68,0.1);backdrop-filter:blur(5px);">
-                   <span style="font-size:36px;text-shadow:0 0 20px rgba(239,68,68,0.5);">⚠️</span><br/><br/>
-                   <b style="font-size:18px;">App Execution Error</b><br/><br/>
-                   <div style="text-align:left; font-size:14px; color:#fca5a5;background:rgba(0,0,0,0.3);padding:16px;border-radius:12px;">
+               sContent.innerHTML = `<div style="color:var(--danger);text-align:center;padding:40px; border: 1px dashed var(--danger); border-radius: 12px; background: rgba(239,68,68,0.1);">
+                   <span style="font-size:30px;">⚠️</span><br/><br/>
+                   <b style="font-size:16px;">App Execution Error</b><br/><br/>
+                   <div style="text-align:left; font-size:13px; color:#fca5a5;">
                        <b>Exact Error from Phone:</b><br/>${exactError}<br/><br/>
                        <b>Action Required:</b> Open the app on the child phone, ensure all permissions are granted, and try again.
                    </div>
@@ -678,7 +576,7 @@ async function sendCommand(command, data = {}) {
            if(statusEl) { statusEl.textContent = 'Failed'; statusEl.className = 'live-status'; }
            
            unsub(); 
-       } else if (cmdData.status === 'executed') {
+       } else if (cmdData.status === 'executed' || cmdData.status === 'expired') {
            console.log(`Command ${command} executed successfully by phone!`);
            unsub(); 
        }
@@ -731,7 +629,7 @@ function initSocket(userId) {
     streamContent.innerHTML = `
       <img
         src="data:image/jpeg;base64,${data.frameBase64}"
-        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.5);"
+        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:12px;"
         onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
       />`;
 
@@ -740,7 +638,7 @@ function initSocket(userId) {
       statusEl.textContent = 'Live ●';
       statusEl.className = 'live-status on';
     }
-    document.getElementById('audio-toggle-btn').style.display = 'inline-flex';
+    document.getElementById('audio-toggle-btn').style.display = 'block';
   });
 
   attachAudioListener();
@@ -775,7 +673,7 @@ function toggleLive(mode) {
 
   document.querySelectorAll('.live-card').forEach(c => c.classList.remove('active'));
   document.getElementById('card-' + mode)?.classList.add('active');
-  document.getElementById('btn-stop-live').style.display = 'inline-flex';
+  document.getElementById('btn-stop-live').style.display = 'block';
 
   const titles = { screen: '🖥️ Screen Mirror — Live', camera_back: '📷 Back Camera — Live', camera_front: '🤳 Front Camera — Live' };
   document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
@@ -783,9 +681,8 @@ function toggleLive(mode) {
   const streamContent = document.getElementById('stream-content');
   streamContent.innerHTML = `
     <div style="text-align:center;padding:40px">
-      <div class="spinner" style="margin:0 auto 20px"></div>
-      <p style="color:var(--text);font-weight:500;">Connecting via WebSockets...</p>
-      <p style="color:var(--muted);font-size:13px;margin-top:8px;">Please wait while we establish a secure connection</p>
+      <div class="spinner" style="margin:0 auto 16px"></div>
+      <p style="color:var(--muted)">Connecting via WebSockets...</p>
     </div>`;
 
   document.getElementById('audio-toggle-btn').style.display = 'none';
@@ -796,13 +693,13 @@ function toggleLive(mode) {
     const sContent = document.getElementById('stream-content');
     if (sContent) {
       sContent.innerHTML = `
-        <div style="text-align:center;padding:40px;color:#ef4444;background:rgba(239,68,68,0.05);border-radius:16px;">
-          <div style="font-size:56px;margin-bottom:16px;text-shadow:0 0 20px rgba(239,68,68,0.3);">⚠️</div>
-          <div style="font-size:20px;font-weight:800;margin-bottom:16px">Connection Timeout</div>
-          <div style="font-size:14px;color:#fca5a5;max-width:320px;margin:0 auto;background:rgba(0,0,0,0.2);padding:16px;border-radius:12px;text-align:left;">
+        <div style="text-align:center;padding:40px;color:#ef4444;">
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:12px">Connection Timeout</div>
+          <div style="font-size:13px;color:#fca5a5;max-width:320px;margin:0 auto">
             1. App is closed/killed<br>2. Internet is OFF<br>3. Permissions denied
           </div>
-          <button onclick="toggleLive('${mode}')" class="btn btn-primary" style="margin-top:24px">Retry Connection</button>
+          <button onclick="toggleLive('${mode}')" class="btn btn-primary btn-sm" style="margin-top:16px">Retry</button>
         </div>`;
     }
     const statusEl = document.getElementById('status-' + mode);
@@ -828,11 +725,11 @@ function stopAllLive() {
 
   document.getElementById('btn-stop-live').style.display = 'none';
   document.getElementById('audio-toggle-btn').style.display = 'none';
-  document.getElementById('audio-toggle-btn').innerHTML = 'Turn Audio ON';
+  document.getElementById('audio-toggle-btn').textContent = 'Turn Audio ON';
   document.getElementById('audio-toggle-btn').className = 'btn btn-primary btn-sm';
 
   const streamContent = document.getElementById('stream-content');
-  if (streamContent) streamContent.innerHTML = '<span style="font-size:32px;opacity:0.5;margin-bottom:12px;">📡</span><p style="color:var(--muted);font-weight:500;">Select a feature above to start monitoring</p>';
+  if (streamContent) streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
   document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
 }
 
@@ -841,11 +738,11 @@ function toggleAudioStream() {
   isAudioActive = !isAudioActive;
   const btn = document.getElementById('audio-toggle-btn');
   if (isAudioActive) {
-    btn.innerHTML = '🔇 Mute Audio';
+    btn.textContent = '🔇 Mute Audio';
     btn.classList.replace('btn-primary', 'btn-danger');
     sendCommand('START_AUDIO_CAPTURE', { requestId: 'audio_' + Date.now() });
   } else {
-    btn.innerHTML = 'Turn Audio ON';
+    btn.textContent = 'Turn Audio ON';
     btn.classList.replace('btn-danger', 'btn-primary');
     sendCommand('STOP_AUDIO_CAPTURE');
   }
@@ -918,7 +815,7 @@ async function loadChildren() {
       const tab = document.createElement('div');
       const isActive = currentChildId === child.id;
       tab.className = 'child-tab' + (isActive ? ' active' : '');
-      tab.innerHTML = (child.emoji || '👦') + ' <span>' + child.name + '</span>';
+      tab.innerHTML = (child.emoji || '👦') + ' ' + child.name;
       tab.onclick = () => selectChild(child.id, tab);
       tabsEl.appendChild(tab);
     });
@@ -929,7 +826,7 @@ async function loadChildren() {
       if (firstTab) firstTab.classList.add('active');
       loadChildData();
     } else if (!firstChild) {
-      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:8px 16px;background:rgba(255,255,255,0.05);border-radius:20px;">No children yet —</span>';
+      tabsEl.innerHTML = '<span style="color:var(--muted);font-size:13px;padding:4px 8px;">No children yet —</span>';
     }
   } catch (err) { console.error(err); }
 
@@ -1054,11 +951,11 @@ async function loadActivity() {
   try {
     const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('activity').orderBy('timestamp','desc').limit(15).get();
     const el = document.getElementById('activity-list');
-    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;background:rgba(255,255,255,0.02);border-radius:12px;">No activity yet</p>'; return; }
+    if (snap.empty) { el.innerHTML = '<p style="color:var(--muted);padding:20px;">No activity yet</p>'; return; }
     el.innerHTML = '<table><tbody>' + snap.docs.map(doc => {
       const d = doc.data();
       const time = d.timestamp?.toDate?.()?.toLocaleTimeString() || '--';
-      return `<tr><td style="color:var(--muted);font-size:13px;font-weight:500;width:120px;">${time}</td><td><span class="badge badge-info">${d.type||'--'}</span></td><td style="color:var(--text);">${d.details||'--'}</td></tr>`;
+      return `<tr><td style="color:var(--muted);font-size:12px">${time}</td><td>${d.type||'--'}</td><td>${d.details||'--'}</td></tr>`;
     }).join('') + '</tbody></table>';
   } catch(e) {}
 }
@@ -1077,10 +974,10 @@ async function loadApps() {
 }
 function filterApps(q) {
   const filtered = allApps.filter(a => (a.appName||a.id).toLowerCase().includes(q.toLowerCase()));
-  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:24px;background:rgba(255,255,255,0.02);border-radius:12px;text-align:center;">No apps found</p>'; return; }
+  if(!filtered.length) { document.getElementById('apps-list').innerHTML='<p style="padding:20px">No apps</p>'; return; }
   document.getElementById('apps-list').innerHTML = '<table><tbody>' + filtered.map(app => {
-    return `<tr><td style="font-size:15px;"><b>${app.appName||app.id}</b></td>
-    <td style="text-align:right;"><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
+    return `<tr><td><b>${app.appName||app.id}</b></td>
+    <td><label class="toggle"><input type="checkbox" ${app.blocked?'checked':''} onchange="toggleApp('${app.id}',this.checked)"><span class="toggle-slider"></span></label></td></tr>`;
   }).join('') + '</tbody></table>';
 }
 async function toggleApp(appId, blocked) {
@@ -1091,7 +988,7 @@ async function loadFilter() { loadBlockedDomains(); }
 async function loadBlockedDomains() {
   if (!currentChildId) return;
   const snap = await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('blocked_domains').get();
-  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:12px 16px;border-bottom:1px solid rgba(51, 65, 85, 0.3);display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:500;"><span style="opacity:0.6;margin-right:8px;">🚫</span> ${d.id}</span> <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p style="padding:16px;color:var(--muted);">No blocked domains</p>';
+  document.getElementById('blocked-domains-list').innerHTML = snap.docs.length ? snap.docs.map(d => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">🚫 ${d.id} <button class="btn btn-ghost btn-sm" onclick="unblockDomain('${d.id}')">Remove</button></div>`).join('') : '<p>No blocked domains</p>';
 }
 async function blockDomain() {
   const domain = document.getElementById('new-domain').value.trim().toLowerCase();
@@ -1106,7 +1003,6 @@ function closeTimeLimitModal() { document.getElementById('modal-time-limit').cla
 async function saveTimeLimits() { closeTimeLimitModal(); }
 function loadScreenTimeSection() {}
 
-// 🔥 UPDATED LOCATION LOGIC (Leaflet.js)
 function loadLocation() {
   if (!currentChildId) return;
   if (locationUnsubscribe) locationUnsubscribe();
@@ -1123,9 +1019,8 @@ function loadLocation() {
       }
       
       document.getElementById('map-area').style.display = 'none';
-      
       const mapView = document.getElementById('map-view');
-      mapView.style.display = 'block';
+      if (mapView) mapView.style.display = 'block';
       
       if (!mapInstance) {
         mapInstance = L.map('map-view').setView([lat, lng], 15);
@@ -1144,7 +1039,7 @@ function loadLocation() {
         L.control.layers(baseMaps).addTo(mapInstance);
         
         mapMarker = L.marker([lat, lng]).addTo(mapInstance);
-		setTimeout(() => { mapInstance.invalidateSize(); }, 500);
+        setTimeout(() => mapInstance.invalidateSize(), 500);
       } else {
         mapInstance.setView([lat, lng], mapInstance.getZoom());
         mapMarker.setLatLng([lat, lng]);
@@ -1159,8 +1054,16 @@ async function loadAlerts() {
   let query = db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).collection('alerts').orderBy('timestamp', 'desc').limit(30);
   if(filterVal) query = query.where('type', '==', filterVal);
   const snap = await query.get();
-  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td style="width:150px;"><span class="badge badge-warning">${d.data().type}</span></td><td style="font-weight:500;">${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:24px;text-align:center;color:var(--muted);background:rgba(255,255,255,0.02);border-radius:12px;">No alerts</p>';
+  document.getElementById('alerts-list').innerHTML = snap.docs.length ? '<table><tbody>' + snap.docs.map(d => `<tr><td>${d.data().type}</td><td>${d.data().message}</td></tr>`).join('') + '</tbody></table>' : '<p style="padding:20px">No alerts</p>';
 }
+
+// 🔥 AUTO-STOP WHEN TAB CLOSED OR BACK BUTTON PRESSED
+window.addEventListener('beforeunload', () => {
+  if (currentLiveMode) stopAllLive();
+});
+window.addEventListener('popstate', () => {
+  if (currentLiveMode) stopAllLive();
+});
 </script>
 </body>
 </html>

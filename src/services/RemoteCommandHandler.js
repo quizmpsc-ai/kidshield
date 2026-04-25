@@ -92,12 +92,23 @@ class RemoteCommandHandler {
     });
 
     this.socket.on('disconnect', (reason) => {
-        console.log("Socket Disconnected:", reason);
+        console.log("⚠️ Socket Disconnected:", reason, "- Emergency stop of all streams.");
+        
+        // 🔥 AUTO-STOP logic: जेव्हां पालक डॅशबोर्ड बंद करतो किंवा इंटरनेट जाते तेव्हां कॅमेरा बंद करा 
+        this._forceStopAllFeatures();
+
         if(this.pingInterval) clearInterval(this.pingInterval);
         if (reason === 'io server disconnect' || reason === 'transport close') {
             setTimeout(() => this.socket.connect(), 2000);
         }
     });
+  }
+
+  // 🔥 नवीन फंक्शन: सर्व चालू असलेले फीचर्स सुरक्षितपणे बंद करण्यासाठी
+  _forceStopAllFeatures() {
+    if (RemoteCamera) RemoteCamera.stopLiveCamera();
+    if (ScreenMirror) ScreenMirror.stopLiveView();
+    if (AmbientAudio) AmbientAudio.stopAmbientCapture();
   }
 
   _attachNativeListeners() {
@@ -148,8 +159,22 @@ class RemoteCommandHandler {
   }
 
   async handleCommand(commandId, commandData) {
-    const { command, data = {} } = commandData;
+    // 🔥 FIX: createdAt डेटा फेच करा
+    const { command, data = {}, createdAt } = commandData;
     console.log("Received Command:", command);
+
+    // 🔥 AUTO-EXPIRE: ६० सेकंदांपेक्षा जुनी कमांड असेल तर ती रन करू नका
+    if (createdAt) {
+        const cmdTime = createdAt.toDate().getTime();
+        const now = new Date().getTime();
+        if (now - cmdTime > 60000) {
+            console.log(`❌ Command ${command} is too old. Expiring it.`);
+            await firestore().collection('commands').doc(commandId).update({ status: 'expired' }).catch(()=>{});
+            this.processingCommands.delete(commandId);
+            return; // इथूनच परत जा, कमांड रन करू नका
+        }
+    }
+
     try {
       await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
 
