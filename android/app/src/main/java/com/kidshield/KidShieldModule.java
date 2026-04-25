@@ -16,6 +16,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
 import android.os.PowerManager;
+import android.app.KeyguardManager;
 
 public class KidShieldModule extends ReactContextBaseJavaModule {
     private static final String PREFS = "KidShieldPrefs";
@@ -30,28 +31,48 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
     public String getName() { return "KidShieldModule"; }
 
     // 🔥 FIX: ॲपला बॅकग्राउंडमधून समोर (Foreground) आणण्यासाठी WakeLock
-    @ReactMethod
+   @ReactMethod
     public void wakeApp(Promise promise) {
         try {
+            // 1. स्क्रीन चालू करण्यासाठी PowerManager चा वापर
             PowerManager pm = (PowerManager) reactContext.getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 PowerManager.WakeLock wl = pm.newWakeLock(
-                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
+                    PowerManager.FULL_WAKE_LOCK |
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                    PowerManager.ON_AFTER_RELEASE, 
                     "KidShield:WakeLock"
                 );
-                wl.acquire(3000); 
+                wl.acquire(5000); // 5 सेकंदांसाठी लॉक घ्या
+                wl.release(); // लगेच सोडा म्हणजे बॅटरी वाचेल
             }
 
+            // 2. Keyguard (Lock Screen) बायपास करण्याचा प्रयत्न
+            /* टीप: Android 8.1+ (API 27+) वर हे थेट Activity मधून (उदा. MainActivity) 
+               setShowWhenLocked(true) ने केले जाते. 
+               तरीही सुरक्षिततेसाठी आपण KeyguardManager वापरतो.
+            */
+            KeyguardManager km = (KeyguardManager) reactContext.getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null && km.inKeyguardRestrictedInputMode()) {
+                 // येथे आपण थेट स्क्रीन अनलॉक करू शकत नाही, पण स्क्रीन 'ON' झाल्यावर
+                 // Activity स्वतःला लॉक-स्क्रीनच्या वर (Over lock-screen) दाखवेल 
+                 // (कारण आपण MainActivity.java मध्ये setShowWhenLocked(true) लिहिले आहे).
+            }
+
+            // 3. ॲपला फ्रंटला (समोर) आणण्यासाठी Intent
             Intent intent = new Intent(reactContext, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            // हे Flags खूप महत्त्वाचे आहेत!
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | 
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP); 
             reactContext.startActivity(intent);
             
             promise.resolve("woken");
         } catch (Exception e) { 
-            promise.reject("ERROR", e.getMessage()); 
+            promise.reject("ERROR", "Wake failed: " + e.getMessage()); 
         }
     }
-
     @ReactMethod
     public void hideAppIcon(Promise promise) {
         try {
