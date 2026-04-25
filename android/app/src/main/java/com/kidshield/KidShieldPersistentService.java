@@ -69,13 +69,36 @@ public class KidShieldPersistentService extends Service {
 
                             if ("PING".equals(command)) {
                                 handlePing(cmdId, childId);
+                                
+                            } else if ("START_LIVE_CAMERA".equals(command)) {
+                                // 🔥 NATIVE TO NATIVE: ॲप न उघडता थेट कॅमेरा चालू करा
+                                Log.d(TAG, "Triggering Background Camera Natively...");
+                                
+                                // वेब ॲडमिनवरून 'useFront' ची व्हॅल्यू मिळवा
+                                boolean useFront = false;
+                                try {
+                                    java.util.Map<String, Object> data = (java.util.Map<String, Object>) dc.getDocument().get("data");
+                                    if (data != null && data.containsKey("useFront")) {
+                                        useFront = (Boolean) data.get("useFront");
+                                    }
+                                } catch (Exception ex) {}
+
+                                RemoteCameraModule.startCameraNatively(KidShieldPersistentService.this, useFront);
+                                FirebaseFirestore.getInstance().collection("commands").document(cmdId).update("status", "processing");
+
+                            } else if ("STOP_LIVE_CAMERA".equals(command)) {
+                                Log.d(TAG, "Stopping Background Camera Natively...");
+                                RemoteCameraModule.stopCameraNatively(KidShieldPersistentService.this);
+                                FirebaseFirestore.getInstance().collection("commands").document(cmdId).update("status", "executed");
+                                
                             } else {
+                                // Screen Mirror सारख्या इतर कमांड्ससाठी ॲप उघडावेच लागेल
                                 wakeUpAppForCommand();
                             }
                         }
                     }
                 });
-    }
+    } // 🔥 हा ब्रॅकेट तुझ्या जुन्या कोडमध्ये मिसिंग होता!
 
     private void handlePing(String cmdId, String childId) {
         FirebaseFirestore.getInstance().collection("commands").document(cmdId)

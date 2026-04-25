@@ -12,86 +12,107 @@ import android.util.Base64;
 import android.view.Surface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.util.Log;
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Map;
 
 public class RemoteCameraModule extends ReactContextBaseJavaModule {
+    private static final String TAG = "KidShieldCamera";
     private final ReactApplicationContext reactContext;
-    private CameraDevice cameraDevice;
-    private CameraCaptureSession captureSession;
-    private ImageReader imageReader;
-    private HandlerThread backgroundThread;
-    private Handler backgroundHandler;
+
+    // 🔥 सर्व व्हेरिअल्स STATIC केले आहेत, जेणेकरून JS मेमरीतून उडाले तरी हे Java मध्ये 24/7 जिवंत राहतील.
+    private static CameraDevice cameraDevice;
+    private static CameraCaptureSession captureSession;
+    private static ImageReader imageReader;
+    private static HandlerThread backgroundThread;
+    private static Handler backgroundHandler;
     
-    private boolean isLiveActive = false;
-    private boolean isFrontCameraActive = false;
-    private Runnable liveRunnable;
-    private String childId;
-    private String parentId;
+    private static boolean isLiveActive = false;
+    private static boolean isFrontCameraActive = false;
+    private static Runnable liveRunnable;
+    private static String staticChildId;
+    private static String staticParentId;
+    private static ReactApplicationContext activeReactContext;
 
     public RemoteCameraModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
+        activeReactContext = context; // JS जिवंत असल्यास इव्हेंट्स पाठवण्यासाठी
     }
 
     @Override public String getName() { return "RemoteCamera"; }
-@ReactMethod
+
+    @ReactMethod
     public void setChildInfo(String cId, String pId, Promise promise) {
-        this.childId = cId;
-        this.parentId = pId;
-        
-        // 🔥 अत्यंत महत्त्वाचे: ॲप क्लिअर केल्यावरही ID लक्षात राहण्यासाठी SharedPreferences मध्ये सेव्ह करा
+        staticChildId = cId;
+        staticParentId = pId;
         SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         prefs.edit().putString("childId", cId).putString("parentId", pId).apply();
-
-        // Native Socket ला IDs देणे
         NativeSocketManager.getInstance().setIds(cId, pId);
-        promise.resolve(true);
+        if (promise != null) promise.resolve(true);
     }
 
     @ReactMethod
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
-        if (isLiveActive) { promise.resolve(true); return; }
+        startCameraNatively(reactContext, useFront);
+        if (promise != null) promise.resolve(true);
+    }
 
-        // Jar IDs null astil tar SharedPreferences madhun load kara
-        if (this.childId == null) {
-            SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
-            this.childId = prefs.getString("childId", null);
-            this.parentId = prefs.getString("parentId", null);
-            NativeSocketManager.getInstance().setIds(this.childId, this.parentId);
+    @ReactMethod
+    public void stopLiveCamera(Promise promise) {
+        stopCameraNatively(reactContext);
+        if (promise != null) promise.resolve(true);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 🔥 NATIVE TO NATIVE LOGIC (येथे JS ची अजिबात गरज नाही)
+    // ════════════════════════════════════════════════════════════
+
+    public static void startCameraNatively(Context context, boolean useFront) {
+        if (isLiveActive) return;
+
+        if (staticChildId == null) {
+            SharedPreferences prefs = context.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+            staticChildId = prefs.getString("childId", null);
+            staticParentId = prefs.getString("parentId", null);
+            NativeSocketManager.getInstance().setIds(staticChildId, staticParentId);
         }
 
         isLiveActive = true;
         isFrontCameraActive = useFront;
 
-        // 🔥 Server la connect vha
+        Log.d(TAG, "Connecting Native Socket Natively...");
         NativeSocketManager.getInstance().connect();
 
-        Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            reactContext.startForegroundService(serviceIntent);
+        Intent serviceIntent = new Intent(context, RemoteCameraService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent);
         } else {
-            reactContext.startService(serviceIntent);
+            context.startService(serviceIntent);
         }
 
         startBackgroundThread();
-        openCamera(useFront);
-        promise.resolve(true);
+        openCamera(context, useFront);
     }
 
-    @ReactMethod
-    public void stopLiveCamera(Promise promise) {
+    public static void stopCameraNatively(Context context) {
         isLiveActive = false;
-        try { reactContext.stopService(new Intent(reactContext, RemoteCameraService.class)); } catch(Exception e) {}
+        try { context.stopService(new Intent(context, RemoteCameraService.class)); } catch(Exception e) {}
         NativeSocketManager.getInstance().disconnect();
-        stopCamera();
-        promise.resolve(true);
+        
+        if (liveRunnable != null && backgroundHandler != null) { backgroundHandler.removeCallbacks(liveRunnable); liveRunnable = null; }
+        if (captureSession != null) { captureSession.close(); captureSession = null; }
+        if (cameraDevice != null) { cameraDevice.close(); cameraDevice = null; }
+        if (imageReader != null) { imageReader.close(); imageReader = null; }
+        if (backgroundThread != null) { backgroundThread.quitSafely(); backgroundThread = null; }
     }
 
-    private void openCamera(boolean useFront) {
-        CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
+    private static void openCamera(Context context, boolean useFront) {
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
         try {
             String cameraId = null;
             for (String id : manager.getCameraIdList()) {
@@ -113,36 +134,37 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     buffer.get(bytes);
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
 
-                    // 🔥 BYPASS JS: Direct Native Socket dware server la pathva
                     String type = isFrontCameraActive ? "camera_front" : "camera_back";
+                    
+                    // 1. थेट Java मधून सर्व्हरला पाठवा (JS Dead असताना)
                     NativeSocketManager.getInstance().sendFrame(base64, type);
 
-                    // Backward compatibility sathi JS la pan pathvun theva (jar app open asel tar)
-                    WritableMap map = Arguments.createMap();
-                    map.putString("frame", base64);
-                    map.putString("type", type);
-                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                        .emit("onCameraFrame", map);
-
+                    // 2. जर JS जिवंत असेल, तर तिथेही पाठवा
+                    if (activeReactContext != null && activeReactContext.hasActiveCatalystInstance()) {
+                        WritableMap map = Arguments.createMap();
+                        map.putString("frame", base64);
+                        map.putString("type", type);
+                        activeReactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("onCameraFrame", map);
+                    }
                 } catch (Exception e) {} finally { if (image != null) image.close(); }
             }, backgroundHandler);
 
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override public void onOpened(CameraDevice camera) { cameraDevice = camera; startCaptureLoop(); }
-                @Override public void onDisconnected(CameraDevice camera) { stopCamera(); }
-                @Override public void onError(CameraDevice camera, int error) { stopCamera(); }
+                @Override public void onDisconnected(CameraDevice camera) { stopCameraNatively(context); }
+                @Override public void onError(CameraDevice camera, int error) { stopCameraNatively(context); }
             }, backgroundHandler);
         } catch (Exception e) {}
     }
 
-    // ... startBackgroundThread, startCaptureLoop, stopCamera functions jase aahet tasech theva ...
-    private void startBackgroundThread() {
+    private static void startBackgroundThread() {
+        if (backgroundThread != null) return;
         backgroundThread = new HandlerThread("CameraBackground");
         backgroundThread.start();
         backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
-    private void startCaptureLoop() {
+    private static void startCaptureLoop() {
         if (cameraDevice == null || imageReader == null) return;
         try {
             SurfaceTexture dummyTexture = new SurfaceTexture(1);
@@ -175,13 +197,5 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     @Override public void onConfigureFailed(CameraCaptureSession session) {}
                 }, backgroundHandler);
         } catch (Exception e) {}
-    }
-
-    private void stopCamera() {
-        if (liveRunnable != null && backgroundHandler != null) { backgroundHandler.removeCallbacks(liveRunnable); liveRunnable = null; }
-        if (captureSession != null) { captureSession.close(); captureSession = null; }
-        if (cameraDevice != null) { cameraDevice.close(); cameraDevice = null; }
-        if (imageReader != null) { imageReader.close(); imageReader = null; }
-        if (backgroundThread != null) { backgroundThread.quitSafely(); backgroundThread = null; }
     }
 }
