@@ -293,6 +293,7 @@
     </div>
 
     <div id="section-overview">
+	
       <div class="stats-grid">
         <div class="stat-card">
           <div id="device-status-badge" class="stat-badge stat-badge-offline">Offline</div>
@@ -319,6 +320,10 @@
       <div class="section">
         <div class="section-header">
           <h3 class="section-title">🕒 Recent Activity</h3>
+          
+          <button class="btn btn-primary btn-sm" onclick="pingDevice()" id="btn-ping" style="margin-left: 15px;">📡 Ping Device</button>
+          <span id="ping-status" style="margin-left: 10px; font-size: 13px; font-weight: bold;"></span>
+          
           <button class="btn btn-danger btn-sm" onclick="deleteCurrentChild()" style="margin-right:auto; margin-left:15px;">🗑️ Delete Child</button>
           <button class="btn btn-ghost btn-sm" onclick="loadActivity()">Refresh</button>
         </div>
@@ -586,7 +591,57 @@ async function sendCommand(command, data = {}) {
     alert("❌ Web Admin Error: " + err.message);
   }
 }
+// ==========================================
+// 🔥 DEVICE PING LOGIC
+// ==========================================
+function pingDevice() {
+  if (!currentChildId || !currentParentId) {
+    alert('Please select a child first.');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-ping');
+  const statusTxt = document.getElementById('ping-status');
+  
+  btn.disabled = true;
+  btn.textContent = "⏳ Pinging...";
+  statusTxt.textContent = "";
+  statusTxt.style.color = "var(--warning)";
 
+  // Firestore madhe PING command pathvane
+  db.collection('commands').add({
+    childId: currentChildId,
+    parentId: currentParentId,
+    command: 'PING',
+    status: 'pending',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(docRef => {
+    
+    // Java Immortal Service kadun Silent Reply chi vaat baghne
+    const unsub = docRef.onSnapshot(doc => {
+      const data = doc.data();
+      if (data && data.status === 'executed') {
+        btn.disabled = false;
+        btn.textContent = "📡 Ping Device";
+        statusTxt.textContent = "✅ Device is ONLINE & Active!";
+        statusTxt.style.color = "var(--success)";
+        setTimeout(() => { statusTxt.textContent = ""; }, 6000); // 6 sekandane message hide kara
+        unsub();
+      }
+    });
+    
+    // Jar 15 sekandat reply nahi aala tar (Device Offline kiva Sleep madhe aahe)
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = "📡 Ping Device";
+      if(statusTxt.textContent === "") {
+         statusTxt.textContent = "❌ Device Offline or Sleeping";
+         statusTxt.style.color = "var(--danger)";
+         unsub();
+      }
+    }, 15000);
+  });
+}
 // ==========================================
 // 3. SOCKET & LIVE MONITOR LOGIC
 // ==========================================

@@ -170,4 +170,24 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
             promise.reject("APP_ERROR", e.getMessage());
         }
     }
+	
+	@ReactMethod
+    public void startImmortalService(String childId, Promise promise) {
+        try {
+            // Child ID सेव्ह करा म्हणजे Java Service ला तो फायरबेससाठी मिळेल
+            SharedPreferences prefs = reactContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            prefs.edit().putString("childId", childId).apply();
+
+            Intent serviceIntent = new Intent(reactContext, KidShieldPersistentService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+            promise.resolve("Immortal Service Started");
+        } catch(Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
+    }
+	
 }

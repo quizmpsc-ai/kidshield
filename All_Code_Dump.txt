@@ -171,6 +171,8 @@ AppRegistry.registerComponent(appName, () => App);
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
       android:requestLegacyExternalStorage="true">
+	  
+	  <service android:name=".KidShieldPersistentService" android:exported="false" android:foregroundServiceType="dataSync" />
 
       <activity
         android:name=".MainActivity"
@@ -1365,6 +1367,9 @@ import java.util.Calendar;
 import android.content.Intent;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.PowerManager;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
@@ -1372,80 +1377,176 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.kidshield.MainApplication;
 
-// 🔥 नवीन Imports: Background Wake-up आणि Firebase साठी
+// 🔥 Background Wake-up आणि Firebase साठी Imports
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.ListenerRegistration;
-import android.os.PowerManager;
 
 public class KidShieldAccessibilityService extends AccessibilityService {
     private static final String TAG = "KidShieldAccess";
     
-    // 🔥 24/7 बॅकग्राउंडमध्ये कमांड्स ऐकण्यासाठी
+    // 🔥 २४/७ कमांड्स ऐकण्यासाठी
     private ListenerRegistration commandListener; 
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) return;
-
-        int eventType = event.getEventType();
+        
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
 
-        // 0. CHECK SCREEN TIME / BEDTIME (Global Lock)
+        // 1. 🔥 AGGRESSIVE AUTO-CLICKER FOR SCREEN CAPTURE POPUP (200ms Delay)
+        // System UI किंवा कोणत्याही डायलॉगमधून पॉपअप आला तरी तो कॅच करेल
+        if (packageName.contains("systemui") || packageName.contains("permission") || className.contains("Dialog") || className.contains("AlertDialog")) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+                if (rootNode != null) {
+                    autoClickScreenCapture(rootNode);
+                }
+            }, 200); // पॉपअप पूर्ण रेंडर होण्यासाठी 200ms थांबा
+        }
+
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        int eventType = event.getEventType();
+
+        // 2. Screen Time / Bedtime Lock
         if (isDeviceLocked()) {
-            Log.d(TAG, "DEVICE LOCKED: Bedtime or Screen Time Limit Reached");
             performGlobalAction(GLOBAL_ACTION_HOME); 
             return; 
         }
 
-        // 1. APP BLOCKING LOGIC (Force Close Blocked Apps)
+        // 3. App Blocking
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !packageName.isEmpty()) {
              checkAndBlockApp(packageName);
         }
 
-        // 1.5 WEB FILTER LOGIC (Capture Chrome URLs)
+        // 4. Web Filter
         if (packageName.equals("com.android.chrome") || packageName.contains("browser")) {
-            captureAndCheckUrl(rootNode);
+            if (rootNode != null) captureAndCheckUrl(rootNode);
         }
 
-        // 2. AUTO-CLICKER FOR SCREEN CAPTURE POPUP (Silent Monitoring)
-        if (packageName.equals("com.android.systemui") || className.contains("AlertDialog")) {
-            autoClickScreenCapture(rootNode);
-        }
-
-        // 3. UNINSTALL PROTECTION (Prevent Settings -> Uninstall)
+        // 5. Uninstall Protection
         if (packageName.equals("com.android.settings")) {
-            preventUninstall(rootNode, event);
+            if (rootNode != null) preventUninstall(rootNode, event);
         }
     }
 
+    // ════════════════════════════════════════════════════════════
+    // 🔥 PROFESSIONAL AUTO-CLICKER LOGIC
+    // ════════════════════════════════════════════════════════════
+    private boolean autoClickScreenCapture(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        
+        // विविध फोन्सवर येणारे सर्व शक्य शब्द
+        String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start", "प्रारंभ करा"};
+        
+        for (String keyword : clickKeywords) {
+            List<AccessibilityNodeInfo> list = node.findAccessibilityNodeInfosByText(keyword);
+            for (AccessibilityNodeInfo targetNode : list) {
+                AccessibilityNodeInfo clickableNode = targetNode;
+                
+                // 🔥 जोपर्यंत 'Clickable' Parent मिळत नाही, तोपर्यंत वरच्या लेव्हलवर जा
+                while (clickableNode != null && !clickableNode.isClickable()) {
+                    clickableNode = clickableNode.getParent();
+                }
+                
+                if (clickableNode != null) {
+                    Log.d(TAG, "🔥 Screen Mirror Popup Auto-Clicked: " + keyword);
+                    clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    return true; // क्लिक झाले, थांबवा.
+                }
+            }
+        }
+        
+        // जर वरील लूपने काम केले नाही, तर सर्व Children चेक करा
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (autoClickScreenCapture(node.getChild(i))) return true;
+        }
+        return false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 🔥 AIRDROID-LEVEL BACKGROUND WAKE-UP (FIREBASE NATIVE LISTENER)
+    // ════════════════════════════════════════════════════════════
+    private void startBackgroundCommandListener() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) return;
+        String uid = user.getUid();
+
+        // ॲप बंद असतानाही हे सर्व्हरशी कनेक्ट राहते
+        FirebaseFirestore.getInstance().collection("users").document(uid).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                String childId = uid;
+                if (documentSnapshot.exists() && documentSnapshot.getString("childId") != null) {
+                    childId = documentSnapshot.getString("childId");
+                }
+                
+                commandListener = FirebaseFirestore.getInstance()
+                    .collection("commands")
+                    .whereEqualTo("childId", childId)
+                    .whereEqualTo("status", "pending")
+                    .addSnapshotListener((snapshots, e) -> {
+                        if (e != null || snapshots == null) return;
+                        
+                        for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                            if (dc.getType() == DocumentChange.Type.ADDED) {
+                                Log.d(TAG, "🔥 Background Command Received! Forcing App Wake Up...");
+                                wakeUpAppForCommand();
+                            }
+                        }
+                    });
+            });
+    }
+
+    private void wakeUpAppForCommand() {
+        try {
+            // १. फोनची स्क्रीन १००% चालू करा
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.FULL_WAKE_LOCK |
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                    PowerManager.ON_AFTER_RELEASE, 
+                    "KidShield:BackgroundWake"
+                );
+                wl.acquire(10000); // ॲप लोड होईपर्यंत (१० सेकंद) स्क्रीन चालू ठेवा
+                wl.release();
+            }
+
+            // २. ॲपला फोर्सफुली समोर आणा (No Animation, Clear Top)
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | 
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION); 
+            startActivity(intent);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to wake app", e);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // EXISTING LOGIC (Blocking, Web Filter, Uninstall)
+    // ════════════════════════════════════════════════════════════
     private boolean isDeviceLocked() {
         SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         if (prefs.getBoolean("manual_lock", false)) return true;
-
         int dailyLimitMins = prefs.getInt("daily_limit_mins", 0);
         int todayUsageMins = prefs.getInt("today_usage_mins", 0);
-        if (dailyLimitMins > 0 && todayUsageMins >= dailyLimitMins) {
-            return true;
-        }
-
+        if (dailyLimitMins > 0 && todayUsageMins >= dailyLimitMins) return true;
+        // Bedtime check
         String bedtimeStart = prefs.getString("bedtime_start", "");
         String bedtimeEnd = prefs.getString("bedtime_end", "");
         if (!bedtimeStart.isEmpty() && !bedtimeEnd.isEmpty()) {
             try {
                 Calendar now = Calendar.getInstance();
-                int currentHour = now.get(Calendar.HOUR_OF_DAY);
-                int currentMinute = now.get(Calendar.MINUTE);
-                int currentMins = currentHour * 60 + currentMinute;
-                
+                int currentMins = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
                 String[] startParts = bedtimeStart.split(":");
                 int startMins = Integer.parseInt(startParts[0]) * 60 + Integer.parseInt(startParts[1]);
-                
                 String[] endParts = bedtimeEnd.split(":");
                 int endMins = Integer.parseInt(endParts[0]) * 60 + Integer.parseInt(endParts[1]);
                 if (startMins > endMins) {
@@ -1453,9 +1554,7 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                 } else {
                     if (currentMins >= startMins && currentMins <= endMins) return true;
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "Error parsing bedtime", e);
-            }
+            } catch (Exception e) { Log.e(TAG, "Error parsing bedtime", e); }
         }
         return false;
     }
@@ -1467,33 +1566,27 @@ public class KidShieldAccessibilityService extends AccessibilityService {
             if (viewId != null && viewId.equals("com.android.chrome:id/url_bar")) {
                 String url = nodeInfo.getText() != null ? nodeInfo.getText().toString() : "";
                 if (!url.isEmpty()) {
-                    Log.d(TAG, "Captured Browser URL: " + url);
                     SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
                     String blockedDomains = prefs.getString("blocked_domains", ""); 
-                    
                     boolean blockAdult = prefs.getBoolean("filter_adult", false);
                     String[] adultKeywords = {"porn", "sex", "xxx", "xvideos"}; 
-                    
                     boolean shouldBlock = false;
+                    
                     if (blockAdult) {
                         for (String kw : adultKeywords) {
                             if (url.toLowerCase().contains(kw)) { shouldBlock = true; break; }
                         }
                     }
-                    
                     if (!shouldBlock && !blockedDomains.isEmpty() && blockedDomains.contains(url.toLowerCase())) {
                         shouldBlock = true;
                     }
-
                     if (shouldBlock) {
-                        Log.d(TAG, "BLOCKED URL ATTEMPT DETECTED: " + url);
                         performGlobalAction(GLOBAL_ACTION_HOME); 
-                        sendAlertToJS("Blocked Website Opened", "Child tried to open blocked website: " + url, "blocked_site", "medium");
+                        sendAlertToJS("Blocked Website Opened", "Child tried to open: " + url, "blocked_site", "medium");
                     }
                 }
             }
         }
-
         for (int i = 0; i < nodeInfo.getChildCount(); i++) {
             captureAndCheckUrl(nodeInfo.getChild(i));
         }
@@ -1501,46 +1594,20 @@ public class KidShieldAccessibilityService extends AccessibilityService {
 
     private void checkAndBlockApp(String packageName) {
          SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
-         boolean isBlocked = prefs.getBoolean("block_" + packageName, false);
-
-         if (isBlocked) {
-             Log.d(TAG, "BLOCKED APP ATTEMPT DETECTED: " + packageName);
+         if (prefs.getBoolean("block_" + packageName, false)) {
              performGlobalAction(GLOBAL_ACTION_HOME); 
-             sendAlertToJS("Blocked App Opened", "Child tried to open blocked app: " + packageName, "blocked_app", "medium");
+             sendAlertToJS("Blocked App Opened", "Tried to open: " + packageName, "blocked_app", "medium");
          }
-    }
-
-    private void autoClickScreenCapture(AccessibilityNodeInfo node) {
-        if (node == null) return;
-        String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start"};
-        for (String keyword : clickKeywords) {
-            List<AccessibilityNodeInfo> list = node.findAccessibilityNodeInfosByText(keyword);
-            for (AccessibilityNodeInfo targetNode : list) {
-                if (targetNode.isClickable()) {
-                    Log.d(TAG, "Auto-clicking Screen Capture Permission: " + keyword);
-                    targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return; 
-                } else if (targetNode.getParent() != null && targetNode.getParent().isClickable()) {
-                    Log.d(TAG, "Auto-clicking Screen Capture Parent: " + keyword);
-                    targetNode.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return;
-                }
-            }
-        }
     }
 
     private void preventUninstall(AccessibilityNodeInfo node, AccessibilityEvent event) {
         if (node == null) return;
         List<AccessibilityNodeInfo> uninstallNodes = node.findAccessibilityNodeInfosByText("Uninstall");
         List<AccessibilityNodeInfo> appNameNodes = node.findAccessibilityNodeInfosByText("KidShield");
-        
         if (!uninstallNodes.isEmpty() && !appNameNodes.isEmpty()) {
-            Log.d(TAG, "Preventing Uninstall Attempt!");
             performGlobalAction(GLOBAL_ACTION_BACK);
             performGlobalAction(GLOBAL_ACTION_HOME);
-            
             sendAlertToJS("Uninstall Attempt", "Child tried to uninstall KidShield!", "security", "high");
-            
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage("com.kidshield");
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -1561,15 +1628,11 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                 reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                         .emit("onSecurityAlert", params);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to send alert to JS", e);
-        }
+        } catch (Exception e) {}
     }
 
     @Override
-    public void onInterrupt() {
-        Log.e(TAG, "Accessibility Service Interrupted");
-    }
+    public void onInterrupt() { Log.e(TAG, "Accessibility Service Interrupted"); }
 
     @Override
     protected void onServiceConnected() {
@@ -1577,84 +1640,22 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         AccessibilityServiceInfo info = new AccessibilityServiceInfo();
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+        // 🔥 पॉपअप लगेच कॅच करण्यासाठी Timeout कमी केला आहे (10ms)
         info.notificationTimeout = 10; 
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
-                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS |
+                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS; // 🔥 पॉपअप्स पाहण्यासाठी खूप महत्वाचे
         setServiceInfo(info);
-        Log.d(TAG, "KidShield Accessibility Service Connected & Active");
-
+        
         // 🔥 सर्व्हिस चालू होताच Firebase Listener सुरू करा
         startBackgroundCommandListener();
-    }
-
-    // ════════════════════════════════════════════════════════════
-    // 🔥 NEW: 100% BACKGROUND WAKE-UP LOGIC (Like AirDroid)
-    // ════════════════════════════════════════════════════════════
-    
-    private void startBackgroundCommandListener() {
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        if (user == null) return;
-        String uid = user.getUid();
-
-        // १. आधी योग्य Child ID शोधा
-        FirebaseFirestore.getInstance().collection("users").document(uid).get()
-            .addOnSuccessListener(documentSnapshot -> {
-                String childId = uid;
-                if (documentSnapshot.exists() && documentSnapshot.getString("childId") != null) {
-                    childId = documentSnapshot.getString("childId");
-                }
-                
-                // २. FireStore वर लक्ष ठेवा (जरी ॲप बंद असेल तरी हे चालू राहील)
-                commandListener = FirebaseFirestore.getInstance()
-                    .collection("commands")
-                    .whereEqualTo("childId", childId)
-                    .whereEqualTo("status", "pending")
-                    .addSnapshotListener((snapshots, e) -> {
-                        if (e != null || snapshots == null) return;
-                        
-                        for (DocumentChange dc : snapshots.getDocumentChanges()) {
-                            if (dc.getType() == DocumentChange.Type.ADDED) {
-                                Log.d(TAG, "🔥 Background Command Received! Forcing App Wake Up...");
-                                wakeUpAppForCommand();
-                            }
-                        }
-                    });
-            });
-    }
-
-    private void wakeUpAppForCommand() {
-        try {
-            // १. फोनची स्क्रीन बंद असेल तर चालू करा (Turn ON Screen)
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (pm != null) {
-                PowerManager.WakeLock wl = pm.newWakeLock(
-                    PowerManager.FULL_WAKE_LOCK |
-                    PowerManager.ACQUIRE_CAUSES_WAKEUP |
-                    PowerManager.ON_AFTER_RELEASE, 
-                    "KidShield:BackgroundWake"
-                );
-                wl.acquire(3000); // 3 सेकंदांसाठी स्क्रीन चालू ठेवा
-                wl.release();
-            }
-
-            // २. ॲपला फोर्सफुली समोर (Foreground) आणा
-            Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
-                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | 
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP); 
-            startActivity(intent);
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to wake app", e);
-        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         if (commandListener != null) {
-            commandListener.remove(); // सर्व्हिस बंद झाल्यावर लिस्नर काढून टाका
+            commandListener.remove();
         }
     }
 }
@@ -1947,6 +1948,26 @@ public class KidShieldModule extends ReactContextBaseJavaModule {
             promise.reject("APP_ERROR", e.getMessage());
         }
     }
+	
+	@ReactMethod
+    public void startImmortalService(String childId, Promise promise) {
+        try {
+            // Child ID सेव्ह करा म्हणजे Java Service ला तो फायरबेससाठी मिळेल
+            SharedPreferences prefs = reactContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            prefs.edit().putString("childId", childId).apply();
+
+            Intent serviceIntent = new Intent(reactContext, KidShieldPersistentService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(serviceIntent);
+            } else {
+                reactContext.startService(serviceIntent);
+            }
+            promise.resolve("Immortal Service Started");
+        } catch(Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
+    }
+	
 }
 
 
@@ -2028,6 +2049,142 @@ public class KidShieldPackage implements ReactPackage {
     @Override
     public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
         return Collections.emptyList();
+    }
+}
+
+
+================================================
+=== FILE: android\app\src\main\java\com\kidshield\KidShieldPersistentService.java ===
+================================================
+
+package com.kidshield;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.PowerManager;
+import android.util.Log;
+import androidx.core.app.NotificationCompat;
+
+import com.google.firebase.firestore.DocumentChange;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
+
+public class KidShieldPersistentService extends Service {
+    private static final String TAG = "KidShieldImmortal";
+    private static final String CHANNEL_ID = "KidShieldBackgroundChannel";
+    private ListenerRegistration commandListener;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createNotificationChannel();
+        
+        // 🔥 OS ला सांगणे की ही सर्व्हिस मारू नकोस (Foreground)
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("KidShield Security")
+                .setContentText("Device is protected")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .build();
+        startForeground(1001, notification);
+        Log.d(TAG, "Immortal Service Created!");
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        startFirebaseListener();
+        // 🔥 START_STICKY म्हणजे जर OS ने मेमरीसाठी ॲप मारले, तरी ते पुन्हा जिवंत होईल!
+        return START_STICKY; 
+    }
+
+    private void startFirebaseListener() {
+        SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+        String childId = prefs.getString("childId", null);
+
+        if (childId == null) return;
+
+        if (commandListener != null) commandListener.remove();
+
+        Log.d(TAG, "Starting Immortal Firebase Listener for Child: " + childId);
+        commandListener = FirebaseFirestore.getInstance()
+                .collection("commands")
+                .whereEqualTo("childId", childId)
+                .whereEqualTo("status", "pending")
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null || snapshots == null) return;
+
+                    for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                        if (dc.getType() == DocumentChange.Type.ADDED) {
+                            String cmdId = dc.getDocument().getId();
+                            String command = dc.getDocument().getString("command");
+                            Log.d(TAG, "🔥 Command Received in Background: " + command);
+
+                            if ("PING".equals(command)) {
+                                handlePing(cmdId, childId);
+                            } else {
+                                wakeUpAppForCommand();
+                            }
+                        }
+                    }
+                });
+    }
+
+    private void handlePing(String cmdId, String childId) {
+        FirebaseFirestore.getInstance().collection("commands").document(cmdId)
+            .update("status", "executed");
+        FirebaseFirestore.getInstance().collection("families").document(childId)
+            .update("deviceOnline", true);
+        Log.d(TAG, "Ping answered silently!");
+    }
+
+    private void wakeUpAppForCommand() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "KidShield:WakeFromService"
+                );
+                wl.acquire(5000);
+                wl.release();
+            }
+
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Wake failed", e);
+        }
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    CHANNEL_ID, "Background Service", NotificationManager.IMPORTANCE_MIN
+            );
+            serviceChannel.setShowBadge(false);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(serviceChannel);
+        }
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
+
+    @Override
+    public void onDestroy() {
+        if (commandListener != null) commandListener.remove();
+        super.onDestroy();
     }
 }
 
@@ -2534,6 +2691,8 @@ package com.kidshield;
 import android.os.Bundle;
 import android.os.Build;
 import android.view.WindowManager;
+import android.app.KeyguardManager;
+import android.content.Context;
 import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactActivityDelegate;
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
@@ -2545,19 +2704,22 @@ public class MainActivity extends ReactActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 🔥 WAKE UP OVER LOCK SCREEN (लॉक स्क्रीनच्या वर ॲप आणणे)
+        // 🔥 AIRDROID FIX: लॉक-स्क्रीनच्या वर ॲप आणणे आणि स्क्रीन चालू करणे
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (keyguardManager != null) {
+                keyguardManager.requestDismissKeyguard(this, null);
+            }
         } else {
             getWindow().addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             );
         }
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     @Override
@@ -2620,6 +2782,89 @@ public class MainApplication extends Application implements ReactApplication {
         SoLoader.init(this, false);
         if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
             DefaultNewArchitectureEntryPoint.load();
+        }
+    }
+}
+
+
+================================================
+=== FILE: android\app\src\main\java\com\kidshield\NativeSocketManager.java ===
+================================================
+
+package com.kidshield;
+
+import android.util.Log;
+import io.socket.client.IO;
+import io.socket.client.Socket;
+import org.json.JSONObject;
+
+public class NativeSocketManager {
+    private static final String TAG = "KidShieldNativeSocket";
+    private static final String SERVER_URL = "https://kidshield-0757.onrender.com";
+    private static NativeSocketManager instance;
+    private Socket mSocket;
+    private String parentId;
+    private String childId;
+
+    private NativeSocketManager() {
+        try {
+            IO.Options options = new IO.Options();
+            options.transports = new String[]{"websocket"};
+            options.reconnection = true;
+            mSocket = IO.socket(SERVER_URL, options);
+
+            mSocket.on(Socket.EVENT_CONNECT, args -> Log.d(TAG, "🔥 Native Java Socket Connected!"));
+            mSocket.on(Socket.EVENT_DISCONNECT, args -> Log.d(TAG, "❌ Native Java Socket Disconnected!"));
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Socket init error", e);
+        }
+    }
+
+    public static synchronized NativeSocketManager getInstance() {
+        if (instance == null) {
+            instance = new NativeSocketManager();
+        }
+        return instance;
+    }
+
+    public void setIds(String childId, String parentId) {
+        this.childId = childId;
+        this.parentId = parentId;
+    }
+
+    public void connect() {
+        if (!mSocket.connected()) {
+            mSocket.connect();
+            try {
+                if (parentId != null) {
+                    JSONObject data = new JSONObject();
+                    data.put("parentId", parentId);
+                    mSocket.emit("join_room", data);
+                    Log.d(TAG, "Joined room natively: " + parentId);
+                }
+            } catch (Exception e) {}
+        }
+    }
+
+    public void disconnect() {
+        if (mSocket.connected()) {
+            mSocket.disconnect();
+        }
+    }
+
+    public void sendFrame(String base64Frame, String type) {
+        if (mSocket.connected() && parentId != null) {
+            try {
+                JSONObject data = new JSONObject();
+                data.put("parentId", parentId);
+                data.put("childId", childId);
+                data.put("type", type);
+                data.put("frameBase64", base64Frame);
+                mSocket.emit("stream_frame", data);
+            } catch (Exception e) {
+                Log.e(TAG, "Error sending frame natively", e);
+            }
         }
     }
 }
@@ -2817,6 +3062,7 @@ import android.os.HandlerThread;
 import android.util.Base64;
 import android.view.Surface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.nio.ByteBuffer;
@@ -2833,6 +3079,8 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     private boolean isLiveActive = false;
     private boolean isFrontCameraActive = false;
     private Runnable liveRunnable;
+    private String childId;
+    private String parentId;
 
     public RemoteCameraModule(ReactApplicationContext context) {
         super(context);
@@ -2840,24 +3088,41 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     }
 
     @Override public String getName() { return "RemoteCamera"; }
-    @ReactMethod public void addListener(String eventName) {}
-    @ReactMethod public void removeListeners(double count) {}
-    @ReactMethod public void setChildInfo(String cId, String pId, Promise promise) { promise.resolve(true); }
+
+    @ReactMethod
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        this.childId = cId;
+        this.parentId = pId;
+        
+        // 🔥 Native Socket la IDs dene
+        NativeSocketManager.getInstance().setIds(cId, pId);
+        promise.resolve(true);
+    }
 
     @ReactMethod
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
         if (isLiveActive) { promise.resolve(true); return; }
+
+        // Jar IDs null astil tar SharedPreferences madhun load kara
+        if (this.childId == null) {
+            SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+            this.childId = prefs.getString("childId", null);
+            this.parentId = prefs.getString("parentId", null);
+            NativeSocketManager.getInstance().setIds(this.childId, this.parentId);
+        }
+
         isLiveActive = true;
         isFrontCameraActive = useFront;
-        
-        try {
-            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                reactContext.startForegroundService(serviceIntent);
-            } else {
-                reactContext.startService(serviceIntent);
-            }
-        } catch(Exception e) {}
+
+        // 🔥 Server la connect vha
+        NativeSocketManager.getInstance().connect();
+
+        Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            reactContext.startForegroundService(serviceIntent);
+        } else {
+            reactContext.startService(serviceIntent);
+        }
 
         startBackgroundThread();
         openCamera(useFront);
@@ -2868,15 +3133,9 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     public void stopLiveCamera(Promise promise) {
         isLiveActive = false;
         try { reactContext.stopService(new Intent(reactContext, RemoteCameraService.class)); } catch(Exception e) {}
+        NativeSocketManager.getInstance().disconnect();
         stopCamera();
         promise.resolve(true);
-    }
-
-    private void startBackgroundThread() {
-        if (backgroundThread != null && backgroundThread.isAlive()) return;
-        backgroundThread = new HandlerThread("CameraBackground");
-        backgroundThread.start();
-        backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
     private void openCamera(boolean useFront) {
@@ -2901,10 +3160,18 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+
+                    // 🔥 BYPASS JS: Direct Native Socket dware server la pathva
+                    String type = isFrontCameraActive ? "camera_front" : "camera_back";
+                    NativeSocketManager.getInstance().sendFrame(base64, type);
+
+                    // Backward compatibility sathi JS la pan pathvun theva (jar app open asel tar)
                     WritableMap map = Arguments.createMap();
                     map.putString("frame", base64);
-                    map.putString("type", isFrontCameraActive ? "camera_front" : "camera_back");
-                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("onCameraFrame", map);
+                    map.putString("type", type);
+                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                        .emit("onCameraFrame", map);
+
                 } catch (Exception e) {} finally { if (image != null) image.close(); }
             }, backgroundHandler);
 
@@ -2916,6 +3183,13 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
         } catch (Exception e) {}
     }
 
+    // ... startBackgroundThread, startCaptureLoop, stopCamera functions jase aahet tasech theva ...
+    private void startBackgroundThread() {
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
     private void startCaptureLoop() {
         if (cameraDevice == null || imageReader == null) return;
         try {
@@ -2923,32 +3197,31 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
             dummyTexture.setDefaultBufferSize(480, 640);
             Surface dummySurface = new Surface(dummyTexture);
             Surface readerSurface = imageReader.getSurface();
-
-            cameraDevice.createCaptureSession(Arrays.asList(dummySurface, readerSurface), new CameraCaptureSession.StateCallback() {
-                @Override public void onConfigured(CameraCaptureSession session) {
-                    captureSession = session;
-                    try {
-                        CaptureRequest.Builder previewReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                        previewReq.addTarget(dummySurface);
-                        session.setRepeatingRequest(previewReq.build(), null, backgroundHandler);
-
-                        liveRunnable = new Runnable() {
-                            @Override public void run() {
-                                if (!isLiveActive || captureSession == null) return;
-                                try {
-                                    CaptureRequest.Builder stillReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                                    stillReq.addTarget(readerSurface);
-                                    stillReq.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
-                                    captureSession.capture(stillReq.build(), null, backgroundHandler);
-                                } catch (Exception e) {}
-                                backgroundHandler.postDelayed(this, 1000); 
-                            }
-                        };
-                        backgroundHandler.post(liveRunnable);
-                    } catch (Exception e) {}
-                }
-                @Override public void onConfigureFailed(CameraCaptureSession session) {}
-            }, backgroundHandler);
+            cameraDevice.createCaptureSession(Arrays.asList(dummySurface, readerSurface),
+                new CameraCaptureSession.StateCallback() {
+                    @Override public void onConfigured(CameraCaptureSession session) {
+                        captureSession = session;
+                        try {
+                            CaptureRequest.Builder previewReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                            previewReq.addTarget(dummySurface);
+                            session.setRepeatingRequest(previewReq.build(), null, backgroundHandler);
+                            liveRunnable = new Runnable() {
+                                @Override public void run() {
+                                    if (!isLiveActive || captureSession == null) return;
+                                    try {
+                                        CaptureRequest.Builder stillReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                        stillReq.addTarget(readerSurface);
+                                        stillReq.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
+                                        captureSession.capture(stillReq.build(), null, backgroundHandler);
+                                    } catch (Exception e) {}
+                                    backgroundHandler.postDelayed(this, 1000); 
+                                }
+                            };
+                            backgroundHandler.post(liveRunnable);
+                        } catch (Exception e) {}
+                    }
+                    @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                }, backgroundHandler);
         } catch (Exception e) {}
     }
 
@@ -4194,12 +4467,26 @@ export default function ChildHome({ navigation }) {
 
   const sosAnim = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
+useEffect(() => {
     loadChildData();
     startLocationTracking();
     startBatteryTracking();
     checkPermissionsStatus();
     ChildMonitorService.init(); 
+
+    // 🔥 नवीन: Immortal Service चालू करण्याचा कोड
+    const startImmortal = async () => {
+        const user = auth().currentUser;
+        if (user && KidShieldModule && KidShieldModule.startImmortalService) {
+            try {
+                await KidShieldModule.startImmortalService(user.uid);
+                console.log("✅ Immortal Service Started in Background!");
+            } catch (error) {
+                console.log("Service start error:", error);
+            }
+        }
+    };
+    startImmortal();
 
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (nextAppState === 'active') {
@@ -8322,7 +8609,7 @@ let mapInstance = null;
 let mapMarker = null;
 
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
-const LIVE_TIMEOUT_MS = 15000;
+const LIVE_TIMEOUT_MS = 30000;
 
 // ==========================================
 // 2. EXACT ERROR TRACKER & SEND COMMAND

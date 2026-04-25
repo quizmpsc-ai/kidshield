@@ -36,6 +36,8 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
       android:requestLegacyExternalStorage="true">
+	  
+	  <service android:name=".KidShieldPersistentService" android:exported="false" android:foregroundServiceType="dataSync" />
 
       <activity
         android:name=".MainActivity"

@@ -26,12 +26,26 @@ export default function ChildHome({ navigation }) {
 
   const sosAnim = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
+useEffect(() => {
     loadChildData();
     startLocationTracking();
     startBatteryTracking();
     checkPermissionsStatus();
     ChildMonitorService.init(); 
+
+    // 🔥 नवीन: Immortal Service चालू करण्याचा कोड
+    const startImmortal = async () => {
+        const user = auth().currentUser;
+        if (user && KidShieldModule && KidShieldModule.startImmortalService) {
+            try {
+                await KidShieldModule.startImmortalService(user.uid);
+                console.log("✅ Immortal Service Started in Background!");
+            } catch (error) {
+                console.log("Service start error:", error);
+            }
+        }
+    };
+    startImmortal();
 
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (nextAppState === 'active') {

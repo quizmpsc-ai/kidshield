@@ -10,6 +10,9 @@ import java.util.Calendar;
 import android.content.Intent;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.PowerManager;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
@@ -23,7 +26,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.ListenerRegistration;
-import android.os.PowerManager;
 
 public class KidShieldAccessibilityService extends AccessibilityService {
     private static final String TAG = "KidShieldAccess";
@@ -34,49 +36,54 @@ public class KidShieldAccessibilityService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) return;
-
-        int eventType = event.getEventType();
+        
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
 
-        // 1. Screen Time / Bedtime Lock
+        // 1. 🔥 AGGRESSIVE AUTO-CLICKER FOR SCREEN CAPTURE POPUP (200ms Delay)
+        // System UI किंवा कोणत्याही डायलॉगमधून पॉपअप आला तरी तो कॅच करेल
+        if (packageName.contains("systemui") || packageName.contains("permission") || className.contains("Dialog") || className.contains("AlertDialog")) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+                if (rootNode != null) {
+                    autoClickScreenCapture(rootNode);
+                }
+            }, 200); // पॉपअप पूर्ण रेंडर होण्यासाठी 200ms थांबा
+        }
+
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        int eventType = event.getEventType();
+
+        // 2. Screen Time / Bedtime Lock
         if (isDeviceLocked()) {
             performGlobalAction(GLOBAL_ACTION_HOME); 
             return; 
         }
 
-        // 2. App Blocking
+        // 3. App Blocking
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !packageName.isEmpty()) {
              checkAndBlockApp(packageName);
         }
 
-        // 3. Web Filter
+        // 4. Web Filter
         if (packageName.equals("com.android.chrome") || packageName.contains("browser")) {
-            captureAndCheckUrl(rootNode);
-        }
-
-        // 4. 🔥 AGGRESSIVE AUTO-CLICKER FOR SCREEN CAPTURE POPUP
-        // कधीकधी पॉपअप 'com.android.systemui' मधून येतो
-        if (packageName.equals("com.android.systemui") || className.contains("AlertDialog") || className.contains("Dialog")) {
-            autoClickScreenCapture(rootNode);
+            if (rootNode != null) captureAndCheckUrl(rootNode);
         }
 
         // 5. Uninstall Protection
         if (packageName.equals("com.android.settings")) {
-            preventUninstall(rootNode, event);
+            if (rootNode != null) preventUninstall(rootNode, event);
         }
     }
 
     // ════════════════════════════════════════════════════════════
     // 🔥 PROFESSIONAL AUTO-CLICKER LOGIC
     // ════════════════════════════════════════════════════════════
-    private void autoClickScreenCapture(AccessibilityNodeInfo node) {
-        if (node == null) return;
+    private boolean autoClickScreenCapture(AccessibilityNodeInfo node) {
+        if (node == null) return false;
         
         // विविध फोन्सवर येणारे सर्व शक्य शब्द
-        String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start"};
+        String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start", "प्रारंभ करा"};
         
         for (String keyword : clickKeywords) {
             List<AccessibilityNodeInfo> list = node.findAccessibilityNodeInfosByText(keyword);
@@ -91,15 +98,16 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                 if (clickableNode != null) {
                     Log.d(TAG, "🔥 Screen Mirror Popup Auto-Clicked: " + keyword);
                     clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return; // क्लिक झाले, थांबवा.
+                    return true; // क्लिक झाले, थांबवा.
                 }
             }
         }
         
         // जर वरील लूपने काम केले नाही, तर सर्व Children चेक करा
         for (int i = 0; i < node.getChildCount(); i++) {
-            autoClickScreenCapture(node.getChild(i));
+            if (autoClickScreenCapture(node.getChild(i))) return true;
         }
+        return false;
     }
 
     // ════════════════════════════════════════════════════════════

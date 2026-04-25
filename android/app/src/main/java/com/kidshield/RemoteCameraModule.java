@@ -11,6 +11,7 @@ import android.os.HandlerThread;
 import android.util.Base64;
 import android.view.Surface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.nio.ByteBuffer;
@@ -27,6 +28,8 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     private boolean isLiveActive = false;
     private boolean isFrontCameraActive = false;
     private Runnable liveRunnable;
+    private String childId;
+    private String parentId;
 
     public RemoteCameraModule(ReactApplicationContext context) {
         super(context);
@@ -34,24 +37,44 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     }
 
     @Override public String getName() { return "RemoteCamera"; }
-    @ReactMethod public void addListener(String eventName) {}
-    @ReactMethod public void removeListeners(double count) {}
-    @ReactMethod public void setChildInfo(String cId, String pId, Promise promise) { promise.resolve(true); }
+@ReactMethod
+    public void setChildInfo(String cId, String pId, Promise promise) {
+        this.childId = cId;
+        this.parentId = pId;
+        
+        // 🔥 अत्यंत महत्त्वाचे: ॲप क्लिअर केल्यावरही ID लक्षात राहण्यासाठी SharedPreferences मध्ये सेव्ह करा
+        SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+        prefs.edit().putString("childId", cId).putString("parentId", pId).apply();
+
+        // Native Socket ला IDs देणे
+        NativeSocketManager.getInstance().setIds(cId, pId);
+        promise.resolve(true);
+    }
 
     @ReactMethod
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
         if (isLiveActive) { promise.resolve(true); return; }
+
+        // Jar IDs null astil tar SharedPreferences madhun load kara
+        if (this.childId == null) {
+            SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+            this.childId = prefs.getString("childId", null);
+            this.parentId = prefs.getString("parentId", null);
+            NativeSocketManager.getInstance().setIds(this.childId, this.parentId);
+        }
+
         isLiveActive = true;
         isFrontCameraActive = useFront;
-        
-        try {
-            Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                reactContext.startForegroundService(serviceIntent);
-            } else {
-                reactContext.startService(serviceIntent);
-            }
-        } catch(Exception e) {}
+
+        // 🔥 Server la connect vha
+        NativeSocketManager.getInstance().connect();
+
+        Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            reactContext.startForegroundService(serviceIntent);
+        } else {
+            reactContext.startService(serviceIntent);
+        }
 
         startBackgroundThread();
         openCamera(useFront);
@@ -62,15 +85,9 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
     public void stopLiveCamera(Promise promise) {
         isLiveActive = false;
         try { reactContext.stopService(new Intent(reactContext, RemoteCameraService.class)); } catch(Exception e) {}
+        NativeSocketManager.getInstance().disconnect();
         stopCamera();
         promise.resolve(true);
-    }
-
-    private void startBackgroundThread() {
-        if (backgroundThread != null && backgroundThread.isAlive()) return;
-        backgroundThread = new HandlerThread("CameraBackground");
-        backgroundThread.start();
-        backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
     private void openCamera(boolean useFront) {
@@ -95,10 +112,18 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+
+                    // 🔥 BYPASS JS: Direct Native Socket dware server la pathva
+                    String type = isFrontCameraActive ? "camera_front" : "camera_back";
+                    NativeSocketManager.getInstance().sendFrame(base64, type);
+
+                    // Backward compatibility sathi JS la pan pathvun theva (jar app open asel tar)
                     WritableMap map = Arguments.createMap();
                     map.putString("frame", base64);
-                    map.putString("type", isFrontCameraActive ? "camera_front" : "camera_back");
-                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("onCameraFrame", map);
+                    map.putString("type", type);
+                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                        .emit("onCameraFrame", map);
+
                 } catch (Exception e) {} finally { if (image != null) image.close(); }
             }, backgroundHandler);
 
@@ -110,6 +135,13 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
         } catch (Exception e) {}
     }
 
+    // ... startBackgroundThread, startCaptureLoop, stopCamera functions jase aahet tasech theva ...
+    private void startBackgroundThread() {
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
     private void startCaptureLoop() {
         if (cameraDevice == null || imageReader == null) return;
         try {
@@ -117,32 +149,31 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
             dummyTexture.setDefaultBufferSize(480, 640);
             Surface dummySurface = new Surface(dummyTexture);
             Surface readerSurface = imageReader.getSurface();
-
-            cameraDevice.createCaptureSession(Arrays.asList(dummySurface, readerSurface), new CameraCaptureSession.StateCallback() {
-                @Override public void onConfigured(CameraCaptureSession session) {
-                    captureSession = session;
-                    try {
-                        CaptureRequest.Builder previewReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                        previewReq.addTarget(dummySurface);
-                        session.setRepeatingRequest(previewReq.build(), null, backgroundHandler);
-
-                        liveRunnable = new Runnable() {
-                            @Override public void run() {
-                                if (!isLiveActive || captureSession == null) return;
-                                try {
-                                    CaptureRequest.Builder stillReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                                    stillReq.addTarget(readerSurface);
-                                    stillReq.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
-                                    captureSession.capture(stillReq.build(), null, backgroundHandler);
-                                } catch (Exception e) {}
-                                backgroundHandler.postDelayed(this, 1000); 
-                            }
-                        };
-                        backgroundHandler.post(liveRunnable);
-                    } catch (Exception e) {}
-                }
-                @Override public void onConfigureFailed(CameraCaptureSession session) {}
-            }, backgroundHandler);
+            cameraDevice.createCaptureSession(Arrays.asList(dummySurface, readerSurface),
+                new CameraCaptureSession.StateCallback() {
+                    @Override public void onConfigured(CameraCaptureSession session) {
+                        captureSession = session;
+                        try {
+                            CaptureRequest.Builder previewReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                            previewReq.addTarget(dummySurface);
+                            session.setRepeatingRequest(previewReq.build(), null, backgroundHandler);
+                            liveRunnable = new Runnable() {
+                                @Override public void run() {
+                                    if (!isLiveActive || captureSession == null) return;
+                                    try {
+                                        CaptureRequest.Builder stillReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                        stillReq.addTarget(readerSurface);
+                                        stillReq.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
+                                        captureSession.capture(stillReq.build(), null, backgroundHandler);
+                                    } catch (Exception e) {}
+                                    backgroundHandler.postDelayed(this, 1000); 
+                                }
+                            };
+                            backgroundHandler.post(liveRunnable);
+                        } catch (Exception e) {}
+                    }
+                    @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                }, backgroundHandler);
         } catch (Exception e) {}
     }
 
