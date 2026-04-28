@@ -20,7 +20,6 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.kidshield.MainApplication;
 
-// 🔥 Background Wake-up आणि Firebase साठी Imports
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -40,15 +39,9 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
 
-        // 1. 🔥 AGGRESSIVE AUTO-CLICKER FOR SCREEN CAPTURE POPUP (200ms Delay)
-        // System UI किंवा कोणत्याही डायलॉगमधून पॉपअप आला तरी तो कॅच करेल
+        // 🔥 1. SUPER AGGRESSIVE AUTO-CLICKER (Loop System)
         if (packageName.contains("systemui") || packageName.contains("permission") || className.contains("Dialog") || className.contains("AlertDialog")) {
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-                if (rootNode != null) {
-                    autoClickScreenCapture(rootNode);
-                }
-            }, 200); // पॉपअप पूर्ण रेंडर होण्यासाठी 200ms थांबा
+            retryAutoClick(10); 
         }
 
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -76,13 +69,23 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 🔥 PROFESSIONAL AUTO-CLICKER LOGIC
-    // ════════════════════════════════════════════════════════════
+    private void retryAutoClick(int attemptsLeft) {
+        if (attemptsLeft <= 0) return;
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode != null && autoClickScreenCapture(rootNode)) {
+                Log.d(TAG, "🔥 Success! Auto-Clicked on attempt: " + (11 - attemptsLeft));
+                return; 
+            }
+            Log.d(TAG, "Retrying auto-click... attempts left: " + (attemptsLeft - 1));
+            retryAutoClick(attemptsLeft - 1);
+        }, 300); 
+    }
+
     private boolean autoClickScreenCapture(AccessibilityNodeInfo node) {
         if (node == null) return false;
         
-        // विविध फोन्सवर येणारे सर्व शक्य शब्द
         String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start", "प्रारंभ करा"};
         
         for (String keyword : clickKeywords) {
@@ -90,7 +93,6 @@ public class KidShieldAccessibilityService extends AccessibilityService {
             for (AccessibilityNodeInfo targetNode : list) {
                 AccessibilityNodeInfo clickableNode = targetNode;
                 
-                // 🔥 जोपर्यंत 'Clickable' Parent मिळत नाही, तोपर्यंत वरच्या लेव्हलवर जा
                 while (clickableNode != null && !clickableNode.isClickable()) {
                     clickableNode = clickableNode.getParent();
                 }
@@ -98,27 +100,22 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                 if (clickableNode != null) {
                     Log.d(TAG, "🔥 Screen Mirror Popup Auto-Clicked: " + keyword);
                     clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return true; // क्लिक झाले, थांबवा.
+                    return true;
                 }
             }
         }
         
-        // जर वरील लूपने काम केले नाही, तर सर्व Children चेक करा
         for (int i = 0; i < node.getChildCount(); i++) {
             if (autoClickScreenCapture(node.getChild(i))) return true;
         }
         return false;
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 🔥 AIRDROID-LEVEL BACKGROUND WAKE-UP (FIREBASE NATIVE LISTENER)
-    // ════════════════════════════════════════════════════════════
     private void startBackgroundCommandListener() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return;
         String uid = user.getUid();
 
-        // ॲप बंद असतानाही हे सर्व्हरशी कनेक्ट राहते
         FirebaseFirestore.getInstance().collection("users").document(uid).get()
             .addOnSuccessListener(documentSnapshot -> {
                 String childId = uid;
@@ -135,8 +132,15 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                         
                         for (DocumentChange dc : snapshots.getDocumentChanges()) {
                             if (dc.getType() == DocumentChange.Type.ADDED) {
-                                Log.d(TAG, "🔥 Background Command Received! Forcing App Wake Up...");
-                                wakeUpAppForCommand();
+                                String command = dc.getDocument().getString("command");
+                                
+                                // 🔥 FIX: Silent Camera Mode - Only wake up for Mirror/Block
+                                if ("START_SCREEN_MIRROR".equals(command) || "BLOCK_APP".equals(command)) {
+                                    Log.d(TAG, "🔥 App Wake Up Triggered For: " + command);
+                                    wakeUpAppForCommand();
+                                } else {
+                                    Log.d(TAG, "⚡ Silent Command Received (" + command + ") - No WakeUp needed!");
+                                }
                             }
                         }
                     });
@@ -145,7 +149,6 @@ public class KidShieldAccessibilityService extends AccessibilityService {
 
     private void wakeUpAppForCommand() {
         try {
-            // १. फोनची स्क्रीन १००% चालू करा
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 PowerManager.WakeLock wl = pm.newWakeLock(
@@ -154,11 +157,10 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                     PowerManager.ON_AFTER_RELEASE, 
                     "KidShield:BackgroundWake"
                 );
-                wl.acquire(10000); // ॲप लोड होईपर्यंत (१० सेकंद) स्क्रीन चालू ठेवा
+                wl.acquire(10000); 
                 wl.release();
             }
 
-            // २. ॲपला फोर्सफुली समोर आणा (No Animation, Clear Top)
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
                             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | 
@@ -172,16 +174,13 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    // EXISTING LOGIC (Blocking, Web Filter, Uninstall)
-    // ════════════════════════════════════════════════════════════
     private boolean isDeviceLocked() {
         SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         if (prefs.getBoolean("manual_lock", false)) return true;
         int dailyLimitMins = prefs.getInt("daily_limit_mins", 0);
         int todayUsageMins = prefs.getInt("today_usage_mins", 0);
         if (dailyLimitMins > 0 && todayUsageMins >= dailyLimitMins) return true;
-        // Bedtime check
+        
         String bedtimeStart = prefs.getString("bedtime_start", "");
         String bedtimeEnd = prefs.getString("bedtime_end", "");
         if (!bedtimeStart.isEmpty() && !bedtimeEnd.isEmpty()) {
@@ -283,14 +282,12 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         AccessibilityServiceInfo info = new AccessibilityServiceInfo();
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-        // 🔥 पॉपअप लगेच कॅच करण्यासाठी Timeout कमी केला आहे (10ms)
         info.notificationTimeout = 10; 
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
                      AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS |
-                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS; // 🔥 पॉपअप्स पाहण्यासाठी खूप महत्वाचे
+                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS; 
         setServiceInfo(info);
         
-        // 🔥 सर्व्हिस चालू होताच Firebase Listener सुरू करा
         startBackgroundCommandListener();
     }
 

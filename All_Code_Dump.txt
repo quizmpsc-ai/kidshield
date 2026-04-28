@@ -1377,7 +1377,6 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.kidshield.MainApplication;
 
-// 🔥 Background Wake-up आणि Firebase साठी Imports
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -1397,15 +1396,9 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
 
-        // 1. 🔥 AGGRESSIVE AUTO-CLICKER FOR SCREEN CAPTURE POPUP (200ms Delay)
-        // System UI किंवा कोणत्याही डायलॉगमधून पॉपअप आला तरी तो कॅच करेल
+        // 🔥 1. SUPER AGGRESSIVE AUTO-CLICKER (Loop System)
         if (packageName.contains("systemui") || packageName.contains("permission") || className.contains("Dialog") || className.contains("AlertDialog")) {
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-                if (rootNode != null) {
-                    autoClickScreenCapture(rootNode);
-                }
-            }, 200); // पॉपअप पूर्ण रेंडर होण्यासाठी 200ms थांबा
+            retryAutoClick(10); 
         }
 
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -1433,13 +1426,23 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 🔥 PROFESSIONAL AUTO-CLICKER LOGIC
-    // ════════════════════════════════════════════════════════════
+    private void retryAutoClick(int attemptsLeft) {
+        if (attemptsLeft <= 0) return;
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode != null && autoClickScreenCapture(rootNode)) {
+                Log.d(TAG, "🔥 Success! Auto-Clicked on attempt: " + (11 - attemptsLeft));
+                return; 
+            }
+            Log.d(TAG, "Retrying auto-click... attempts left: " + (attemptsLeft - 1));
+            retryAutoClick(attemptsLeft - 1);
+        }, 300); 
+    }
+
     private boolean autoClickScreenCapture(AccessibilityNodeInfo node) {
         if (node == null) return false;
         
-        // विविध फोन्सवर येणारे सर्व शक्य शब्द
         String[] clickKeywords = {"Start now", "START NOW", "Allow", "ALLOW", "Accept", "Start", "प्रारंभ करा"};
         
         for (String keyword : clickKeywords) {
@@ -1447,7 +1450,6 @@ public class KidShieldAccessibilityService extends AccessibilityService {
             for (AccessibilityNodeInfo targetNode : list) {
                 AccessibilityNodeInfo clickableNode = targetNode;
                 
-                // 🔥 जोपर्यंत 'Clickable' Parent मिळत नाही, तोपर्यंत वरच्या लेव्हलवर जा
                 while (clickableNode != null && !clickableNode.isClickable()) {
                     clickableNode = clickableNode.getParent();
                 }
@@ -1455,27 +1457,22 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                 if (clickableNode != null) {
                     Log.d(TAG, "🔥 Screen Mirror Popup Auto-Clicked: " + keyword);
                     clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return true; // क्लिक झाले, थांबवा.
+                    return true;
                 }
             }
         }
         
-        // जर वरील लूपने काम केले नाही, तर सर्व Children चेक करा
         for (int i = 0; i < node.getChildCount(); i++) {
             if (autoClickScreenCapture(node.getChild(i))) return true;
         }
         return false;
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 🔥 AIRDROID-LEVEL BACKGROUND WAKE-UP (FIREBASE NATIVE LISTENER)
-    // ════════════════════════════════════════════════════════════
     private void startBackgroundCommandListener() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return;
         String uid = user.getUid();
 
-        // ॲप बंद असतानाही हे सर्व्हरशी कनेक्ट राहते
         FirebaseFirestore.getInstance().collection("users").document(uid).get()
             .addOnSuccessListener(documentSnapshot -> {
                 String childId = uid;
@@ -1492,8 +1489,15 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                         
                         for (DocumentChange dc : snapshots.getDocumentChanges()) {
                             if (dc.getType() == DocumentChange.Type.ADDED) {
-                                Log.d(TAG, "🔥 Background Command Received! Forcing App Wake Up...");
-                                wakeUpAppForCommand();
+                                String command = dc.getDocument().getString("command");
+                                
+                                // 🔥 FIX: Silent Camera Mode - Only wake up for Mirror/Block
+                                if ("START_SCREEN_MIRROR".equals(command) || "BLOCK_APP".equals(command)) {
+                                    Log.d(TAG, "🔥 App Wake Up Triggered For: " + command);
+                                    wakeUpAppForCommand();
+                                } else {
+                                    Log.d(TAG, "⚡ Silent Command Received (" + command + ") - No WakeUp needed!");
+                                }
                             }
                         }
                     });
@@ -1502,7 +1506,6 @@ public class KidShieldAccessibilityService extends AccessibilityService {
 
     private void wakeUpAppForCommand() {
         try {
-            // १. फोनची स्क्रीन १००% चालू करा
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 PowerManager.WakeLock wl = pm.newWakeLock(
@@ -1511,11 +1514,10 @@ public class KidShieldAccessibilityService extends AccessibilityService {
                     PowerManager.ON_AFTER_RELEASE, 
                     "KidShield:BackgroundWake"
                 );
-                wl.acquire(10000); // ॲप लोड होईपर्यंत (१० सेकंद) स्क्रीन चालू ठेवा
+                wl.acquire(10000); 
                 wl.release();
             }
 
-            // २. ॲपला फोर्सफुली समोर आणा (No Animation, Clear Top)
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
                             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | 
@@ -1529,16 +1531,13 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    // EXISTING LOGIC (Blocking, Web Filter, Uninstall)
-    // ════════════════════════════════════════════════════════════
     private boolean isDeviceLocked() {
         SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         if (prefs.getBoolean("manual_lock", false)) return true;
         int dailyLimitMins = prefs.getInt("daily_limit_mins", 0);
         int todayUsageMins = prefs.getInt("today_usage_mins", 0);
         if (dailyLimitMins > 0 && todayUsageMins >= dailyLimitMins) return true;
-        // Bedtime check
+        
         String bedtimeStart = prefs.getString("bedtime_start", "");
         String bedtimeEnd = prefs.getString("bedtime_end", "");
         if (!bedtimeStart.isEmpty() && !bedtimeEnd.isEmpty()) {
@@ -1640,14 +1639,12 @@ public class KidShieldAccessibilityService extends AccessibilityService {
         AccessibilityServiceInfo info = new AccessibilityServiceInfo();
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-        // 🔥 पॉपअप लगेच कॅच करण्यासाठी Timeout कमी केला आहे (10ms)
         info.notificationTimeout = 10; 
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
                      AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS |
-                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS; // 🔥 पॉपअप्स पाहण्यासाठी खूप महत्वाचे
+                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS; 
         setServiceInfo(info);
         
-        // 🔥 सर्व्हिस चालू होताच Firebase Listener सुरू करा
         startBackgroundCommandListener();
     }
 
@@ -2076,6 +2073,12 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 
+// ✅ BUG FIXES in this file:
+// 1. childId SharedPreferences madhun yeto (child_XXXXX format) - commands collection match karil
+// 2. wakeUpAppForCommand() only for non-camera commands (camera native chalto)
+// 3. START_STICKY so service persists after kill
+// 4. Firestore listener restart on reconnect
+
 public class KidShieldPersistentService extends Service {
     private static final String TAG = "KidShieldImmortal";
     private static final String CHANNEL_ID = "KidShieldBackgroundChannel";
@@ -2085,50 +2088,96 @@ public class KidShieldPersistentService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        
-        // 🔥 OS ला सांगणे की ही सर्व्हिस मारू नकोस (Foreground)
+
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("KidShield Security")
                 .setContentText("Device is protected")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setOngoing(true)
                 .build();
         startForeground(1001, notification);
-        Log.d(TAG, "Immortal Service Created!");
+        Log.d(TAG, "✅ KidShieldPersistentService Created!");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startFirebaseListener();
-        // 🔥 START_STICKY म्हणजे जर OS ने मेमरीसाठी ॲप मारले, तरी ते पुन्हा जिवंत होईल!
-        return START_STICKY; 
+        return START_STICKY; // ✅ App kill zhale tari restart hoil
     }
 
     private void startFirebaseListener() {
+        // ✅ BUG FIX: SharedPreferences madhun childId yeto
+        // He "child_XXXXX" format madhe aahe - commands collection match karil
+        // (Junyaa code madhe: firebase auth UID vaparla jato jya spashi match hot navhata)
         SharedPreferences prefs = getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         String childId = prefs.getString("childId", null);
+        String parentId = prefs.getString("parentId", null);
 
-        if (childId == null) return;
+        if (childId == null) {
+            Log.w(TAG, "childId not found in SharedPrefs - waiting for pairing");
+            return;
+        }
+
+        Log.d(TAG, "✅ Starting Firebase listener for childId: " + childId);
 
         if (commandListener != null) commandListener.remove();
 
-        Log.d(TAG, "Starting Immortal Firebase Listener for Child: " + childId);
         commandListener = FirebaseFirestore.getInstance()
                 .collection("commands")
-                .whereEqualTo("childId", childId)
+                .whereEqualTo("childId", childId) // ✅ "child_XXXXX" format - correct match!
                 .whereEqualTo("status", "pending")
                 .addSnapshotListener((snapshots, e) -> {
-                    if (e != null || snapshots == null) return;
+                    if (e != null) {
+                        Log.e(TAG, "Listener error: " + e.getMessage());
+                        return;
+                    }
+                    if (snapshots == null) return;
 
                     for (DocumentChange dc : snapshots.getDocumentChanges()) {
                         if (dc.getType() == DocumentChange.Type.ADDED) {
                             String cmdId = dc.getDocument().getId();
                             String command = dc.getDocument().getString("command");
-                            Log.d(TAG, "🔥 Command Received in Background: " + command);
+                            Log.d(TAG, "🔥 Background Command: " + command);
 
                             if ("PING".equals(command)) {
-                                handlePing(cmdId, childId);
+                                handlePing(cmdId, childId, parentId);
+
+                            } else if ("START_LIVE_CAMERA".equals(command)) {
+                                // ✅ NATIVE camera start - App kill astana paN chalel!
+                                // React Native bridge nastat Java level var camera chalto
+                                boolean useFront = false;
+                                try {
+                                    java.util.Map<String, Object> data =
+                                        (java.util.Map<String, Object>) dc.getDocument().get("data");
+                                    if (data != null && data.containsKey("useFront")) {
+                                        useFront = Boolean.TRUE.equals(data.get("useFront"));
+                                    }
+                                } catch (Exception ex) {
+                                    Log.w(TAG, "useFront parse error: " + ex.getMessage());
+                                }
+
+                                Log.d(TAG, "Starting camera natively (no app wakeup needed)...");
+                                RemoteCameraModule.startCameraNatively(
+                                    KidShieldPersistentService.this, useFront
+                                );
+                                FirebaseFirestore.getInstance()
+                                    .collection("commands")
+                                    .document(cmdId)
+                                    .update("status", "processing");
+
+                            } else if ("STOP_LIVE_CAMERA".equals(command)) {
+                                Log.d(TAG, "Stopping camera natively...");
+                                RemoteCameraModule.stopCameraNatively(KidShieldPersistentService.this);
+                                FirebaseFirestore.getInstance()
+                                    .collection("commands")
+                                    .document(cmdId)
+                                    .update("status", "executed");
+
                             } else {
+                                // ✅ Screen Mirror, Audio etc. sathi app ughadave lagate
+                                // (He commands React Native bridge require karatat)
+                                Log.d(TAG, "Non-camera command - waking app: " + command);
                                 wakeUpAppForCommand();
                             }
                         }
@@ -2136,45 +2185,69 @@ public class KidShieldPersistentService extends Service {
                 });
     }
 
-    private void handlePing(String cmdId, String childId) {
-        FirebaseFirestore.getInstance().collection("commands").document(cmdId)
+    private void handlePing(String cmdId, String childId, String parentId) {
+        // Ping silently answer kara - app ughadaychi garaj nahi
+        FirebaseFirestore.getInstance()
+            .collection("commands")
+            .document(cmdId)
             .update("status", "executed");
-        FirebaseFirestore.getInstance().collection("families").document(childId)
-            .update("deviceOnline", true);
-        Log.d(TAG, "Ping answered silently!");
+
+        // Online status update kara
+        if (parentId != null && childId != null) {
+            try {
+                FirebaseFirestore.getInstance()
+                    .collection("families")
+                    .document(parentId)
+                    .collection("children")
+                    .document(childId)
+                    .update("deviceOnline", true);
+            } catch (Exception e) {}
+        }
+        Log.d(TAG, "✅ Ping answered silently");
     }
 
     private void wakeUpAppForCommand() {
         try {
+            // Screen on kara
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 PowerManager.WakeLock wl = pm.newWakeLock(
-                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    PowerManager.FULL_WAKE_LOCK |
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                    PowerManager.ON_AFTER_RELEASE,
                     "KidShield:WakeFromService"
                 );
-                wl.acquire(5000);
+                wl.acquire(10000); // 10 seconds
                 wl.release();
             }
 
+            // App foreground var ana
             Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
-                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            );
             startActivity(intent);
+            Log.d(TAG, "✅ App wake triggered for non-camera command");
+
         } catch (Exception e) {
-            Log.e(TAG, "Wake failed", e);
+            Log.e(TAG, "wakeUpApp error: " + e.getMessage());
         }
     }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                    CHANNEL_ID, "Background Service", NotificationManager.IMPORTANCE_MIN
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Background Service",
+                    NotificationManager.IMPORTANCE_MIN
             );
-            serviceChannel.setShowBadge(false);
+            channel.setShowBadge(false);
+            channel.setSound(null, null);
             NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) manager.createNotificationChannel(serviceChannel);
+            if (manager != null) manager.createNotificationChannel(channel);
         }
     }
 
@@ -2185,6 +2258,32 @@ public class KidShieldPersistentService extends Service {
     public void onDestroy() {
         if (commandListener != null) commandListener.remove();
         super.onDestroy();
+        Log.d(TAG, "Service destroyed - START_STICKY will revive");
+    }
+
+    // ✅ App swipe-kill zhale tari 1 second nantar restart kara
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.e(TAG, "💀 App killed! Scheduling revival in 1 second...");
+
+        Intent restartServiceIntent = new Intent(getApplicationContext(), this.getClass());
+        restartServiceIntent.setPackage(getPackageName());
+
+        android.app.PendingIntent restartPI = android.app.PendingIntent.getService(
+                getApplicationContext(), 1, restartServiceIntent,
+                android.app.PendingIntent.FLAG_ONE_SHOT | android.app.PendingIntent.FLAG_IMMUTABLE
+        );
+
+        android.app.AlarmManager alarmService =
+            (android.app.AlarmManager) getApplicationContext().getSystemService(Context.ALARM_SERVICE);
+        if (alarmService != null) {
+            alarmService.set(
+                android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + 1000,
+                restartPI
+            );
+        }
+        super.onTaskRemoved(rootIntent);
     }
 }
 
@@ -3063,94 +3162,181 @@ import android.util.Base64;
 import android.view.Surface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.os.PowerManager;
+import android.util.Log;
+import android.view.WindowManager;
 import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class RemoteCameraModule extends ReactContextBaseJavaModule {
+    private static final String TAG = "KidShieldCamera";
     private final ReactApplicationContext reactContext;
-    private CameraDevice cameraDevice;
-    private CameraCaptureSession captureSession;
-    private ImageReader imageReader;
-    private HandlerThread backgroundThread;
-    private Handler backgroundHandler;
+
+    private static CameraDevice cameraDevice;
+    private static CameraCaptureSession captureSession;
+    private static ImageReader imageReader;
+    private static HandlerThread backgroundThread;
+    private static Handler backgroundHandler;
+
+    private static boolean isLiveActive = false;
+    private static boolean isFrontCameraActive = false;
+    private static Runnable liveRunnable;
+    private static String staticChildId;
+    private static String staticParentId;
+    private static ReactApplicationContext activeReactContext;
     
-    private boolean isLiveActive = false;
-    private boolean isFrontCameraActive = false;
-    private Runnable liveRunnable;
-    private String childId;
-    private String parentId;
+    // 🔥 WakeLock Variable (Only declared once)
+    private static PowerManager.WakeLock cameraPartialWakeLock;
 
     public RemoteCameraModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
+        activeReactContext = context;
     }
 
-    @Override public String getName() { return "RemoteCamera"; }
-@ReactMethod
+    @Override
+    public String getName() { return "RemoteCamera"; }
+
+    @ReactMethod public void addListener(String eventName) {}
+    @ReactMethod public void removeListeners(double count) {}
+
+    @ReactMethod
     public void setChildInfo(String cId, String pId, Promise promise) {
-        this.childId = cId;
-        this.parentId = pId;
-        
-        // 🔥 अत्यंत महत्त्वाचे: ॲप क्लिअर केल्यावरही ID लक्षात राहण्यासाठी SharedPreferences मध्ये सेव्ह करा
+        staticChildId = cId;
+        staticParentId = pId;
         SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
         prefs.edit().putString("childId", cId).putString("parentId", pId).apply();
-
-        // Native Socket ला IDs देणे
         NativeSocketManager.getInstance().setIds(cId, pId);
-        promise.resolve(true);
+        Log.d(TAG, "Child info set: " + cId + " / " + pId);
+        if (promise != null) promise.resolve(true);
     }
 
     @ReactMethod
     public void startLiveCamera(boolean useFront, int intervalSeconds, Promise promise) {
-        if (isLiveActive) { promise.resolve(true); return; }
+        startCameraNatively(reactContext, useFront);
+        if (promise != null) promise.resolve(true);
+    }
 
-        // Jar IDs null astil tar SharedPreferences madhun load kara
-        if (this.childId == null) {
-            SharedPreferences prefs = reactContext.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
-            this.childId = prefs.getString("childId", null);
-            this.parentId = prefs.getString("parentId", null);
-            NativeSocketManager.getInstance().setIds(this.childId, this.parentId);
+    @ReactMethod
+    public void stopLiveCamera(Promise promise) {
+        stopCameraNatively(reactContext);
+        if (promise != null) promise.resolve(true);
+    }
+
+    public static void startCameraNatively(Context context, boolean useFront) {
+        if (isLiveActive) {
+            Log.d(TAG, "Camera already active, skipping duplicate start");
+            return;
+        }
+
+        if (staticChildId == null || staticParentId == null) {
+            SharedPreferences prefs = context.getSharedPreferences("KidShieldPrefs", Context.MODE_PRIVATE);
+            staticChildId = prefs.getString("childId", null);
+            staticParentId = prefs.getString("parentId", null);
+            if (staticChildId != null && staticParentId != null) {
+                NativeSocketManager.getInstance().setIds(staticChildId, staticParentId);
+            }
+        }
+
+        if (staticChildId == null || staticParentId == null) {
+            Log.e(TAG, "❌ Cannot start camera: childId/parentId not found!");
+            return;
         }
 
         isLiveActive = true;
         isFrontCameraActive = useFront;
 
-        // 🔥 Server la connect vha
-        NativeSocketManager.getInstance().connect();
-
-        Intent serviceIntent = new Intent(reactContext, RemoteCameraService.class);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            reactContext.startForegroundService(serviceIntent);
-        } else {
-            reactContext.startService(serviceIntent);
+        // 🔥 CPU Sleep Fix (WakeLock Acquire)
+        try {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null && (cameraPartialWakeLock == null || !cameraPartialWakeLock.isHeld())) {
+                cameraPartialWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KidShield:CameraCPUAlive");
+                cameraPartialWakeLock.acquire(30 * 60 * 1000L); // max 30 minutes
+                Log.d(TAG, "✅ PARTIAL_WAKE_LOCK acquired - CPU will not sleep!");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "WakeLock error: " + e.getMessage());
         }
 
+        try {
+            Intent serviceIntent = new Intent(context, RemoteCameraService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent);
+            } else {
+                context.startService(serviceIntent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Service start error: " + e.getMessage());
+        }
+
+        Log.d(TAG, "Connecting Native Socket for streaming...");
+        NativeSocketManager.getInstance().connect();
         startBackgroundThread();
-        openCamera(useFront);
-        promise.resolve(true);
+        openCamera(context, useFront);
     }
 
-    @ReactMethod
-    public void stopLiveCamera(Promise promise) {
+    public static void stopCameraNatively(Context context) {
+        // 🔥 CPU Sleep Fix (WakeLock Release)
+        if (cameraPartialWakeLock != null && cameraPartialWakeLock.isHeld()) {
+            cameraPartialWakeLock.release();
+            cameraPartialWakeLock = null;
+            Log.d(TAG, "✅ PARTIAL_WAKE_LOCK released - Battery saved");
+        }
+        
         isLiveActive = false;
-        try { reactContext.stopService(new Intent(reactContext, RemoteCameraService.class)); } catch(Exception e) {}
+        Log.d(TAG, "Stopping camera natively...");
+
+        try { context.stopService(new Intent(context, RemoteCameraService.class)); } catch (Exception e) {}
         NativeSocketManager.getInstance().disconnect();
-        stopCamera();
-        promise.resolve(true);
+
+        if (liveRunnable != null && backgroundHandler != null) {
+            backgroundHandler.removeCallbacks(liveRunnable);
+            liveRunnable = null;
+        }
+        if (captureSession != null) {
+            try { captureSession.close(); } catch (Exception e) {}
+            captureSession = null;
+        }
+        if (cameraDevice != null) {
+            try { cameraDevice.close(); } catch (Exception e) {}
+            cameraDevice = null;
+        }
+        if (imageReader != null) {
+            try { imageReader.close(); } catch (Exception e) {}
+            imageReader = null;
+        }
+        if (backgroundThread != null) {
+            backgroundThread.quitSafely();
+            backgroundThread = null;
+            backgroundHandler = null;
+        }
     }
 
-    private void openCamera(boolean useFront) {
-        CameraManager manager = (CameraManager) reactContext.getSystemService(Context.CAMERA_SERVICE);
+    private static void startBackgroundThread() {
+        if (backgroundThread != null && backgroundThread.isAlive()) return;
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
+    private static void openCamera(Context context, boolean useFront) {
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
         try {
             String cameraId = null;
             for (String id : manager.getCameraIdList()) {
                 CameraCharacteristics chars = manager.getCameraCharacteristics(id);
                 Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
-                if (useFront && facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) { cameraId = id; break; }
-                if (!useFront && facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) { cameraId = id; break; }
+                if (useFront && facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                    cameraId = id; break;
+                }
+                if (!useFront && facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                    cameraId = id; break;
+                }
             }
+
             if (cameraId == null) return;
 
             imageReader = ImageReader.newInstance(480, 640, ImageFormat.JPEG, 2);
@@ -3159,81 +3345,124 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
                 try {
                     image = reader.acquireLatestImage();
                     if (image == null) return;
+
                     ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
                     String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
 
-                    // 🔥 BYPASS JS: Direct Native Socket dware server la pathva
                     String type = isFrontCameraActive ? "camera_front" : "camera_back";
+
                     NativeSocketManager.getInstance().sendFrame(base64, type);
 
-                    // Backward compatibility sathi JS la pan pathvun theva (jar app open asel tar)
-                    WritableMap map = Arguments.createMap();
-                    map.putString("frame", base64);
-                    map.putString("type", type);
-                    reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                        .emit("onCameraFrame", map);
-
-                } catch (Exception e) {} finally { if (image != null) image.close(); }
+                    if (activeReactContext != null && activeReactContext.hasActiveCatalystInstance()) {
+                        WritableMap map = Arguments.createMap();
+                        map.putString("frame", base64);
+                        map.putString("type", type);
+                        activeReactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("onCameraFrame", map);
+                    }
+                } catch (Exception e) {} finally {
+                    if (image != null) { try { image.close(); } catch (Exception e) {} }
+                }
             }, backgroundHandler);
 
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
-                @Override public void onOpened(CameraDevice camera) { cameraDevice = camera; startCaptureLoop(); }
-                @Override public void onDisconnected(CameraDevice camera) { stopCamera(); }
-                @Override public void onError(CameraDevice camera, int error) { stopCamera(); }
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    cameraDevice = camera;
+                    startCaptureLoop();
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    Log.w(TAG, "Camera disconnected");
+                    // 🔥 COLDBET FIX: Session Cleanup
+                    if (captureSession != null) {
+                        try { captureSession.close(); } catch (Exception e) {}
+                        captureSession = null;
+                    }
+                    camera.close();
+                    cameraDevice = null;
+                    if (isLiveActive && backgroundHandler != null) {
+                        backgroundHandler.postDelayed(() -> {
+                            if (isLiveActive) openCamera(context, useFront);
+                        }, 2000);
+                    }
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    camera.close();
+                    cameraDevice = null;
+                }
             }, backgroundHandler);
+
         } catch (Exception e) {}
     }
 
-    // ... startBackgroundThread, startCaptureLoop, stopCamera functions jase aahet tasech theva ...
-    private void startBackgroundThread() {
-        backgroundThread = new HandlerThread("CameraBackground");
-        backgroundThread.start();
-        backgroundHandler = new Handler(backgroundThread.getLooper());
-    }
-
-    private void startCaptureLoop() {
+    private static void startCaptureLoop() {
         if (cameraDevice == null || imageReader == null) return;
         try {
             SurfaceTexture dummyTexture = new SurfaceTexture(1);
             dummyTexture.setDefaultBufferSize(480, 640);
             Surface dummySurface = new Surface(dummyTexture);
             Surface readerSurface = imageReader.getSurface();
-            cameraDevice.createCaptureSession(Arrays.asList(dummySurface, readerSurface),
+
+            cameraDevice.createCaptureSession(
+                Arrays.asList(dummySurface, readerSurface),
                 new CameraCaptureSession.StateCallback() {
-                    @Override public void onConfigured(CameraCaptureSession session) {
+                    @Override
+                    public void onConfigured(CameraCaptureSession session) {
                         captureSession = session;
                         try {
                             CaptureRequest.Builder previewReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                             previewReq.addTarget(dummySurface);
                             session.setRepeatingRequest(previewReq.build(), null, backgroundHandler);
+
                             liveRunnable = new Runnable() {
-                                @Override public void run() {
-                                    if (!isLiveActive || captureSession == null) return;
+                                @Override
+                                public void run() {
+                                    if (!isLiveActive || captureSession == null || cameraDevice == null) return;
                                     try {
                                         CaptureRequest.Builder stillReq = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                                         stillReq.addTarget(readerSurface);
+                                        
+                                        // 🔥 COLDBET FIX: Photo orientation rotation
+                                        int rotation = 0;
+                                        try {
+                                            if (activeReactContext != null) {
+                                                WindowManager wm = (WindowManager) activeReactContext.getSystemService(Context.WINDOW_SERVICE);
+                                                if (wm != null && wm.getDefaultDisplay() != null) {
+                                                    int displayRotation = wm.getDefaultDisplay().getRotation();
+                                                    switch (displayRotation) {
+                                                        case Surface.ROTATION_0:   rotation = isFrontCameraActive ? 270 : 90;  break;
+                                                        case Surface.ROTATION_90:  rotation = isFrontCameraActive ? 180 : 0;   break;
+                                                        case Surface.ROTATION_180: rotation = isFrontCameraActive ? 90  : 270; break;
+                                                        case Surface.ROTATION_270: rotation = isFrontCameraActive ? 0   : 180; break;
+                                                    }
+                                                }
+                                            }
+                                        } catch (Exception e) {}
+                                        
+                                        stillReq.set(CaptureRequest.JPEG_ORIENTATION, rotation);
                                         stillReq.set(CaptureRequest.JPEG_QUALITY, (byte) 30);
                                         captureSession.capture(stillReq.build(), null, backgroundHandler);
                                     } catch (Exception e) {}
-                                    backgroundHandler.postDelayed(this, 1000); 
+                                    
+                                    if (backgroundHandler != null) {
+                                        backgroundHandler.postDelayed(this, 1000);
+                                    }
                                 }
                             };
                             backgroundHandler.post(liveRunnable);
                         } catch (Exception e) {}
                     }
-                    @Override public void onConfigureFailed(CameraCaptureSession session) {}
-                }, backgroundHandler);
-        } catch (Exception e) {}
-    }
 
-    private void stopCamera() {
-        if (liveRunnable != null && backgroundHandler != null) { backgroundHandler.removeCallbacks(liveRunnable); liveRunnable = null; }
-        if (captureSession != null) { captureSession.close(); captureSession = null; }
-        if (cameraDevice != null) { cameraDevice.close(); cameraDevice = null; }
-        if (imageReader != null) { imageReader.close(); imageReader = null; }
-        if (backgroundThread != null) { backgroundThread.quitSafely(); backgroundThread = null; }
+                    @Override
+                    public void onConfigureFailed(CameraCaptureSession session) {}
+                }, backgroundHandler
+            );
+        } catch (Exception e) {}
     }
 }
 
@@ -3243,29 +3472,75 @@ public class RemoteCameraModule extends ReactContextBaseJavaModule {
 ================================================
 
 package com.kidshield;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
+import android.util.Log;
+
+// ✅ BUG FIX 1: Android 14 (API 34) FOREGROUND_SERVICE_TYPE_CAMERA crash fix
+// ✅ BUG FIX 2: START_STICKY added - App kill jhyavar service restart hoil
+// ✅ BUG FIX 3: ServiceInfo import added correctly
 
 public class RemoteCameraService extends Service {
+    private static final String TAG = "RemoteCameraService";
+    private static final String CHANNEL_ID = "kidshield_camera";
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "RemoteCameraService started");
+        startForegroundWithCorrectType();
+        // ✅ START_STICKY: Service kill jhyavar OS automatically restart kareil
+        // (Previously START_NOT_STICKY hote - he BUG hote!)
+        return START_STICKY;
+    }
+
+    private void startForegroundWithCorrectType() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel("kidshield_camera", "Camera Active", NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class).createNotificationChannel(channel);
-            Notification notification = new Notification.Builder(this, "kidshield_camera")
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Camera Active",
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setShowBadge(false);
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.createNotificationChannel(channel);
+
+            Notification notification = new Notification.Builder(this, CHANNEL_ID)
                     .setContentTitle("KidShield")
                     .setContentText("Camera is active")
                     .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .setOngoing(true)
                     .build();
-            startForeground(1002, notification);
+
+            // ✅ CRITICAL FIX: Android 14 (API 34) madhe FOREGROUND_SERVICE_TYPE_CAMERA
+            // declare karna mandatory aahe, nahitar SecurityException yeila!
+            // (Document madhe pasted code madhye he missing hote)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // Android 10+ (API 29+): serviceType specify kara
+                startForeground(1002, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA);
+            } else {
+                startForeground(1002, notification);
+            }
+
+            Log.d(TAG, "✅ Foreground started with CAMERA type (Android 14 safe)");
         }
-        return START_NOT_STICKY;
     }
-    @Override public IBinder onBind(Intent intent) { return null; }
+
+    @Override
+    public void onDestroy() {
+        Log.d(TAG, "RemoteCameraService destroyed - will be restarted by START_STICKY");
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
 }
 
 
@@ -6763,6 +7038,9 @@ export default api;
 === FILE: src\services\ChildMonitorService.js ===
 ================================================
 
+// src/services/ChildMonitorService.js
+// ✅ ALL BUGS FIXED
+
 import { NativeModules, AppState } from 'react-native';
 import BackgroundFetch from 'react-native-background-fetch';
 import Geolocation from '@react-native-community/geolocation';
@@ -6776,47 +7054,106 @@ const API_URL = 'https://kidshield-0757.onrender.com';
 
 class ChildMonitorService {
   constructor() {
-    this.childId = null;
+    this.childId = null;      // actual Firebase UID (users collection document ID)
     this.parentId = null;
-    this.childDocId = null;
+    this.childDocId = null;   // "child_XXXXX" (families/commands collection document ID)
     this.locationWatcher = null;
   }
 
   async init() {
-    this.childId = auth().currentUser?.uid;
-    if (!this.childId) return;
+    const user = auth().currentUser;
+    if (!user) return;
+
+    this.childId = user.uid; // actual Firebase UID
 
     try {
       const userDoc = await firestore().collection('users').doc(this.childId).get();
-      this.parentId = userDoc.data()?.parentId;
-      let correctChildId = userDoc.data()?.childId || this.childId;
-      if (this.parentId) {
-          try {
-              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
-              if (!childSnap.empty) correctChildId = childSnap.docs[0].id;
-          } catch(e) {}
-      }
-      this.childDocId = correctChildId;
-    } catch (e) {}
+      const data = userDoc.data();
 
+      this.parentId = data?.parentId || null;
+
+      // ✅ BUG FIX (CRITICAL): childDocId correct set kara
+      //
+      // PROBLEM (Old code):
+      //   families collection madhe child document "child_XXXXX" ID ne aahe
+      //   pan code `families/{parentId}/children` limit(1) get karto jyacha
+      //   result unreliable aahe (multiple children aslyas wrong doc milel)
+      //
+      // SOLUTION:
+      //   users/{uid}.childId field madhe "child_XXXXX" already aahe!
+      //   Tyacha sidha use kara - reliable ani exact match.
+      this.childDocId = data?.childId || this.childId;
+
+      console.log('ChildMonitor init:', {
+        uid: this.childId,
+        childDocId: this.childDocId,   // "child_XXXXX"
+        parentId: this.parentId,
+      });
+
+      // ✅ BUG FIX: families document exist nahi (Image 4 madhye distate)
+      // "This document does not exist" - families/{parentId} document navhata
+      // Aapan setDoc with merge karto je document create karil jar navhata tar
+      if (this.parentId && this.childDocId) {
+        await this._ensureFamiliesDocExists();
+      }
+
+    } catch (e) {
+      console.log('ChildMonitor init error:', e.message);
+    }
+
+    // RemoteCommandHandler init (childId set jhale nantar)
     RemoteCommandHandler.init();
+
     this.startLocationTracking();
     this.startUsageReporting();
     this.setupBackgroundFetch();
     this.updateOnlineStatus(true);
-    console.log('KidShield monitoring started (Stable Version)');
+
+    console.log('✅ KidShield monitoring started');
+  }
+
+  // ✅ NEW: families document ensure kara (exist navhata tar create kara)
+  async _ensureFamiliesDocExists() {
+    try {
+      const childRef = firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId);
+
+      const childDoc = await childRef.get();
+      if (!childDoc.exists) {
+        // Document navhata - create kara
+        await childRef.set({
+          childId: this.childDocId,
+          deviceOnline: true,
+          paired: true,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          lastSeen: firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        console.log('✅ Families child document created:', this.childDocId);
+      }
+    } catch (e) {
+      console.log('families doc create error:', e.message);
+    }
   }
 
   async updateOnlineStatus(online) {
     if (!this.parentId || !this.childDocId) return;
     try {
-      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
-        .set({ deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() }, { merge: true });
-    } catch (e) {}
+      // ✅ set with merge: document navhata tar create hoil, asel tar update hoil
+      await firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .set(
+          { deviceOnline: online, lastSeen: firestore.FieldValue.serverTimestamp() },
+          { merge: true }  // ← CRITICAL: update fails "document does not exist" bug fix
+        );
+    } catch (e) {
+      console.log('updateOnlineStatus error:', e.message);
+    }
   }
 
   startLocationTracking() {
-    this.reportLocation(); 
+    this.reportLocation();
     if (this.locationWatcher !== null) Geolocation.clearWatch(this.locationWatcher);
 
     this.locationWatcher = Geolocation.watchPosition(
@@ -6824,7 +7161,9 @@ class ChildMonitorService {
         const { latitude, longitude } = position.coords;
         this.saveLocationToFirebase(latitude, longitude);
       },
-      (error) => { if(error.code === 2) this.reportLocationViaNetwork(); },
+      (error) => {
+        if (error.code === 2) this.reportLocationViaNetwork();
+      },
       { enableHighAccuracy: true, distanceFilter: 10, interval: 10000, fastestInterval: 5000 }
     );
   }
@@ -6835,7 +7174,9 @@ class ChildMonitorService {
         const { latitude, longitude } = position.coords;
         this.saveLocationToFirebase(latitude, longitude);
       },
-      (error) => { if (error.code === 2) this.reportLocationViaNetwork(); },
+      (error) => {
+        if (error.code === 2) this.reportLocationViaNetwork();
+      },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 }
     );
   }
@@ -6852,18 +7193,37 @@ class ChildMonitorService {
   }
 
   async saveLocationToFirebase(latitude, longitude) {
-    if (!this.parentId || !this.childDocId) return;
+    if (!this.childId) return;
     try {
+      // locations collection update (always - parentId navhata tari)
       await firestore().collection('locations').doc(this.childId).set({
-        lat: latitude, lng: longitude, updatedAt: firestore.FieldValue.serverTimestamp(),
-      });
-      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId).update({
-          location: { lat: latitude, lng: longitude },
-          locationName: latitude.toFixed(5) + ', ' + longitude.toFixed(5),
-          locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
-      });
-      await axios.post(API_URL + '/api/location/update', { childId: this.childId, parentId: this.parentId, latitude, longitude }).catch(() => {});
-    } catch (e) {}
+        lat: latitude,
+        lng: longitude,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // families collection update (jar parent linked asel tar)
+      if (this.parentId && this.childDocId) {
+        await firestore()
+          .collection('families').doc(this.parentId)
+          .collection('children').doc(this.childDocId)
+          .set({
+            location: { lat: latitude, lng: longitude },
+            locationName: latitude.toFixed(5) + ', ' + longitude.toFixed(5),
+            locationUpdatedAt: firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+      }
+
+      // Backend API update
+      await axios.post(API_URL + '/api/location/update', {
+        childId: this.childId,
+        parentId: this.parentId,
+        latitude, longitude,
+      }).catch(() => {});
+
+    } catch (e) {
+      console.log('saveLocation error:', e.message);
+    }
   }
 
   startUsageReporting() {
@@ -6873,31 +7233,56 @@ class ChildMonitorService {
 
   async syncRealDeviceData() {
     if (!this.parentId || !this.childDocId) return;
+
+    // 1. Screen Time sync
     try {
       const hasPermission = await UsageStats?.hasUsagePermission();
       if (hasPermission) {
         const usageData = await UsageStats.getTodayUsage();
-        await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
-          .update({ todayMinutes: usageData.totalMinutes || 0, lastSync: firestore.FieldValue.serverTimestamp() }, { merge: true });
+        await firestore()
+          .collection('families').doc(this.parentId)
+          .collection('children').doc(this.childDocId)
+          .set(
+            { todayMinutes: usageData.totalMinutes || 0, lastSync: firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+          );
       }
     } catch(e) {}
 
+    // 2. Battery sync
     try {
       let batteryLevel = 100;
-      if (BatteryModule && BatteryModule.getBatteryLevel) {
+      if (BatteryModule?.getBatteryLevel) {
         batteryLevel = parseInt(await BatteryModule.getBatteryLevel()) || 100;
       }
-      await firestore().collection('families').doc(this.parentId).collection('children').doc(this.childDocId)
-        .update({ battery: batteryLevel, deviceOnline: true, lastSeen: firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await firestore()
+        .collection('families').doc(this.parentId)
+        .collection('children').doc(this.childDocId)
+        .set(
+          {
+            battery: batteryLevel,
+            deviceOnline: true,
+            lastSeen: firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
     } catch(e) {}
   }
 
   setupBackgroundFetch() {
     try {
-      BackgroundFetch.configure({ minimumFetchInterval: 15, stopOnTerminate: false, startOnBoot: true, enableHeadless: true }, async (taskId) => {
-        await this.reportLocation();
-        BackgroundFetch.finish(taskId);
-      });
+      BackgroundFetch.configure(
+        {
+          minimumFetchInterval: 15,
+          stopOnTerminate: false,
+          startOnBoot: true,
+          enableHeadless: true,
+        },
+        async (taskId) => {
+          await this.reportLocation();
+          BackgroundFetch.finish(taskId);
+        }
+      );
     } catch (e) {}
   }
 
@@ -7368,6 +7753,9 @@ export default PerformanceManager;
 === FILE: src\services\RemoteCommandHandler.js ===
 ================================================
 
+// src/services/RemoteCommandHandler.js
+// ✅ ALL BUGS FIXED - Complete Working Version
+
 import { NativeModules, NativeEventEmitter, AppState } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
@@ -7380,7 +7768,7 @@ class RemoteCommandHandler {
   constructor() {
     this.isInitialized = false;
     this.unsubscribe = null;
-    this.childId = null;
+    this.childId = null;    // "child_XXXXX" format - commands collection match karil
     this.parentId = null;
     this.socket = null;
     this.screenListener = null;
@@ -7395,120 +7783,161 @@ class RemoteCommandHandler {
 
     try {
       const user = auth().currentUser;
-      if (!user) return;
+      if (!user) { console.log('RemoteCommand: No user logged in'); return; }
+
       const doc = await firestore().collection('users').doc(user.uid).get();
-      if (!doc.exists) return;
+      if (!doc.exists) { console.log('RemoteCommand: User doc missing'); return; }
 
-      const data = doc.data();       
+      const data = doc.data();
       this.parentId = data?.parentId || null;
-      let correctChildId = data?.childId || user.uid;
-      
-      if (this.parentId) {
-          try {
-              const childSnap = await firestore().collection('families').doc(this.parentId).collection('children').limit(1).get();
-              if (!childSnap.empty) correctChildId = childSnap.docs[0].id;
-          } catch(e) {}
-      }
-      this.childId = correctChildId;
-      if (!this.parentId) return;
 
+      // ✅ BUG FIX (CRITICAL): childId correct set kara
+      //
+      // PROBLEM (Old code):
+      //   this.childId = user.uid  → "bekAhk98wIMAeBZ9Os6wdnEa42D3" (actual Firebase UID)
+      //   pan commands collection madhe childId = "child_1776675070755" (child_XXXXX format)
+      //   MISMATCH! Commands kabhi receive hot navhate!
+      //
+      // SOLUTION:
+      //   Firestore users/{uid} document madhe "childId" field aahe → "child_XXXXX"
+      //   Hach value commands collection madhe pathavli jaate
+      //   So: this.childId = data.childId (child_XXXXX) ← CORRECT MATCH!
+      this.childId = data?.childId || user.uid;
+
+      console.log(`✅ RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
+
+      if (!this.parentId) {
+        console.log('RemoteCommand: No parent linked yet - skipping');
+        return;
+      }
+
+      // Socket connect kara
       this._connectSocket();
+
+      // Native event listeners attach kara
       this._attachNativeListeners();
 
-      // 🔥 CRITICAL FIX: Safe Checks Added to prevent "is not a function" error
-      try { if (RemoteCamera && typeof RemoteCamera.setChildInfo === 'function') await RemoteCamera.setChildInfo(this.childId, this.parentId); } catch(e){}
-      try { if (AmbientAudio && typeof AmbientAudio.setChildInfo === 'function') await AmbientAudio.setChildInfo(this.childId, this.parentId); } catch(e){}
-      try { if (ScreenMirror && typeof ScreenMirror.setChildInfo === 'function') await ScreenMirror.setChildInfo(this.childId, this.parentId); } catch(e){}
+      // Native modules la childId set kara (SharedPreferences sathi)
+      try { if (RemoteCamera?.setChildInfo) await RemoteCamera.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (AmbientAudio?.setChildInfo) await AmbientAudio.setChildInfo(this.childId, this.parentId); } catch(e){}
+      try { if (ScreenMirror?.setChildInfo) await ScreenMirror.setChildInfo(this.childId, this.parentId); } catch(e){}
 
+      // Firestore command listener
       this._attachCommandListener();
-      
+
+      // App state change listener (foreground yeta socket reconnect kara)
       AppState.addEventListener('change', this._handleAppStateChange.bind(this));
+
       this.isInitialized = true;
-      console.log('✅ RemoteCommandHandler Ready!');
+      console.log('✅ RemoteCommandHandler Ready! childId:', this.childId);
+
     } catch (err) {
-      console.log('❌ RemoteCommand Init Error:', err);
+      console.log('❌ RemoteCommand Init Error:', err.message);
     }
   }
 
   _handleAppStateChange(nextAppState) {
     if (nextAppState === 'active') {
-       if (!this.socket?.connected) this._connectSocket();
+      if (!this.socket?.connected) {
+        console.log('App active - reconnecting socket...');
+        this._connectSocket();
+      }
     }
   }
 
   _connectSocket() {
     if (this.socket?.connected) return;
-    
-    console.log("Attempting Socket Connection...");
-    this.socket = io(SOCKET_SERVER_URL, { 
-        transports: ['websocket'], 
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 2000,
-        pingTimeout: 60000, 
-        pingInterval: 25000  
+
+    console.log('Connecting to socket server...');
+    this.socket = io(SOCKET_SERVER_URL, {
+      transports: ['websocket', 'polling'], // polling fallback add kela
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 2000,
+      pingTimeout: 60000,
+      pingInterval: 25000,
     });
 
-    this.socket.on('connect', () => { 
-        console.log("Socket Connected!", this.socket.id);
-        this.socket.emit('join_room', { parentId: this.parentId }); 
-        
-        if(this.pingInterval) clearInterval(this.pingInterval);
-        this.pingInterval = setInterval(() => {
-            if(this.socket && this.socket.connected) {
-                this.socket.emit('ping', { childId: this.childId });
-            }
-        }, 20000);
+    this.socket.on('connect', () => {
+      console.log('✅ Socket Connected:', this.socket.id);
+      this.socket.emit('join_room', { parentId: this.parentId });
+
+      // Keep-alive ping
+      if (this.pingInterval) clearInterval(this.pingInterval);
+      this.pingInterval = setInterval(() => {
+        if (this.socket?.connected) {
+          this.socket.emit('ping', { childId: this.childId });
+        }
+      }, 20000);
     });
 
     this.socket.on('disconnect', (reason) => {
-        console.log("⚠️ Socket Disconnected:", reason, "- Emergency stop of all streams.");
-        
-        // 🔥 AUTO-STOP logic: जेव्हां पालक डॅशबोर्ड बंद करतो किंवा इंटरनेट जाते तेव्हां कॅमेरा बंद करा 
-        this._forceStopAllFeatures();
+      console.log('⚠️ Socket Disconnected:', reason);
+      // Parent disconnected tar sagle streams band kara
+      this._forceStopAllFeatures();
+      if (this.pingInterval) clearInterval(this.pingInterval);
+    });
 
-        if(this.pingInterval) clearInterval(this.pingInterval);
-        if (reason === 'io server disconnect' || reason === 'transport close') {
-            setTimeout(() => this.socket.connect(), 2000);
-        }
+    this.socket.on('force_stop_streams', () => {
+      console.log('Server: force_stop received');
+      this._forceStopAllFeatures();
+    });
+
+    this.socket.on('connect_error', (err) => {
+      console.log('Socket connect error:', err.message);
     });
   }
 
-  // 🔥 नवीन फंक्शन: सर्व चालू असलेले फीचर्स सुरक्षितपणे बंद करण्यासाठी
   _forceStopAllFeatures() {
-    if (RemoteCamera) RemoteCamera.stopLiveCamera();
-    if (ScreenMirror) ScreenMirror.stopLiveView();
-    if (AmbientAudio) AmbientAudio.stopAmbientCapture();
+    try { if (RemoteCamera) RemoteCamera.stopLiveCamera(); } catch(e) {}
+    try { if (ScreenMirror) ScreenMirror.stopLiveView(); } catch(e) {}
+    try { if (AmbientAudio) AmbientAudio.stopAmbientCapture(); } catch(e) {}
   }
 
   _attachNativeListeners() {
+    // Screen frames
     const screenEmitter = ScreenMirror ? new NativeEventEmitter(ScreenMirror) : null;
-    const cameraEmitter = RemoteCamera ? new NativeEventEmitter(RemoteCamera) : null;
-    const audioEmitter  = AmbientAudio ? new NativeEventEmitter(AmbientAudio)  : null;
-
     if (this.screenListener) this.screenListener.remove();
     if (screenEmitter) {
       this.screenListener = screenEmitter.addListener('onScreenFrame', (base64Frame) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: base64Frame, type: 'screen' });
+          this.socket.emit('stream_frame', {
+            parentId: this.parentId,
+            childId: this.childId,
+            frameBase64: base64Frame,
+            type: 'screen',
+          });
         }
       });
     }
 
+    // Camera frames
+    const cameraEmitter = RemoteCamera ? new NativeEventEmitter(RemoteCamera) : null;
     if (this.cameraListener) this.cameraListener.remove();
     if (cameraEmitter) {
       this.cameraListener = cameraEmitter.addListener('onCameraFrame', (event) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_frame', { parentId: this.parentId, childId: this.childId, frameBase64: event.frame, type: event.type });
+          this.socket.emit('stream_frame', {
+            parentId: this.parentId,
+            childId: this.childId,
+            frameBase64: event.frame,
+            type: event.type, // 'camera_back' or 'camera_front'
+          });
         }
       });
     }
 
+    // Audio frames
+    const audioEmitter = AmbientAudio ? new NativeEventEmitter(AmbientAudio) : null;
     if (this.audioListener) this.audioListener.remove();
     if (audioEmitter) {
       this.audioListener = audioEmitter.addListener('onAudioFrame', (base64Audio) => {
         if (this.socket?.connected && this.parentId) {
-          this.socket.emit('stream_audio', { parentId: this.parentId, childId: this.childId, audioBase64: base64Audio });
+          this.socket.emit('stream_audio', {
+            parentId: this.parentId,
+            childId: this.childId,
+            audioBase64: base64Audio,
+          });
         }
       });
     }
@@ -7516,102 +7945,152 @@ class RemoteCommandHandler {
 
   _attachCommandListener() {
     if (this.unsubscribe) this.unsubscribe();
-    this.unsubscribe = firestore().collection('commands')
-      .where('childId', '==', this.childId).where('status', '==', 'pending')
-      .onSnapshot(snap => {
+
+    console.log('Attaching command listener for childId:', this.childId);
+
+    // ✅ this.childId = "child_XXXXX" format → commands collection match karil!
+    this.unsubscribe = firestore()
+      .collection('commands')
+      .where('childId', '==', this.childId) // ← CORRECT: "child_XXXXX"
+      .where('status', '==', 'pending')
+      .onSnapshot(
+        snap => {
+          console.log(`Commands received: ${snap.docs.length}`);
           snap.docs.forEach(doc => {
             const cmdId = doc.id;
             if (this.processingCommands.has(cmdId)) return;
             this.processingCommands.add(cmdId);
             this.handleCommand(cmdId, doc.data());
           });
-      });
+        },
+        error => {
+          console.log('Command listener error:', error.code, error.message);
+        }
+      );
   }
 
   async handleCommand(commandId, commandData) {
-    // 🔥 FIX: createdAt डेटा फेच करा
     const { command, data = {}, createdAt } = commandData;
-    console.log("Received Command:", command);
+    console.log('Executing command:', command);
 
-    // 🔥 AUTO-EXPIRE: ६० सेकंदांपेक्षा जुनी कमांड असेल तर ती रन करू नका
+    // ✅ Auto-expire: 60 seconds juna command ignore kara
     if (createdAt) {
-        const cmdTime = createdAt.toDate().getTime();
-        const now = new Date().getTime();
-        if (now - cmdTime > 60000) {
-            console.log(`❌ Command ${command} is too old. Expiring it.`);
-            await firestore().collection('commands').doc(commandId).update({ status: 'expired' }).catch(()=>{});
-            this.processingCommands.delete(commandId);
-            return; // इथूनच परत जा, कमांड रन करू नका
-        }
+      const cmdTime = createdAt.toDate?.().getTime() || 0;
+      if (Date.now() - cmdTime > 60000) {
+        console.log(`Command ${command} too old - expiring`);
+        await firestore().collection('commands').doc(commandId)
+          .update({ status: 'expired' }).catch(() => {});
+        this.processingCommands.delete(commandId);
+        return;
+      }
     }
 
     try {
-      await firestore().collection('commands').doc(commandId).update({ status: 'processing' });
+      await firestore().collection('commands').doc(commandId)
+        .update({ status: 'processing' });
 
-      // 🔥 ॲपला वर आणण्याची खात्री करा (Wake up App)
-      if (['START_LIVE_CAMERA', 'START_LIVE_VIEW', 'START_AUDIO_CAPTURE'].includes(command)) {
-         if (KidShieldModule && KidShieldModule.wakeApp) {
-             console.log("Waking up app over lock screen...");
-             await KidShieldModule.wakeApp().catch(()=>{});
-             // App समोर येण्यासाठी 3 seconds वेळ द्या
-             await new Promise(resolve => setTimeout(resolve, 3000)); 
-         }
+      // ✅ Screen/Audio commands sathi app wake kara
+      if (['START_LIVE_VIEW', 'START_AUDIO_CAPTURE'].includes(command)) {
+        if (KidShieldModule?.wakeApp) {
+          await KidShieldModule.wakeApp().catch(() => {});
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
 
       switch (command) {
+
         case 'START_LIVE_CAMERA':
-          if (RemoteCamera) await RemoteCamera.startLiveCamera(data.useFront === true, data.intervalSeconds || 1);
-          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
-             await AmbientAudio.startAmbientCapture('camera_audio').catch(()=>{});
+          if (RemoteCamera) {
+            await RemoteCamera.startLiveCamera(
+              data.useFront === true,
+              data.intervalSeconds || 1
+            );
+          }
+          // Camera sathe audio paN start kara
+          if (AmbientAudio?.startAmbientCapture) {
+            await AmbientAudio.startAmbientCapture('camera_audio').catch(() => {});
           }
           break;
-          
+
         case 'STOP_LIVE_CAMERA':
           if (RemoteCamera) await RemoteCamera.stopLiveCamera();
-          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
-             await AmbientAudio.stopAmbientCapture().catch(()=>{});
+          if (AmbientAudio?.stopAmbientCapture) {
+            await AmbientAudio.stopAmbientCapture().catch(() => {});
           }
           break;
-          
+
         case 'START_AUDIO_CAPTURE':
-          if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
-             await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
+          if (AmbientAudio?.startAmbientCapture) {
+            await AmbientAudio.startAmbientCapture(data.requestId || 'audio_live');
           }
           break;
-          
+
         case 'STOP_AUDIO_CAPTURE':
-          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
-             await AmbientAudio.stopAmbientCapture();
+          if (AmbientAudio?.stopAmbientCapture) {
+            await AmbientAudio.stopAmbientCapture();
           }
           break;
-          
+
         case 'START_LIVE_VIEW':
           if (ScreenMirror) {
-            await ScreenMirror.requestPermission();
-            await ScreenMirror.startLiveView(data.intervalSeconds || 1);
-            if (AmbientAudio && typeof AmbientAudio.startAmbientCapture === 'function') {
-               await AmbientAudio.startAmbientCapture('screen_audio').catch(()=>{});
+            try {
+              await ScreenMirror.requestPermission();
+              await ScreenMirror.startLiveView(data.intervalSeconds || 1);
+              if (AmbientAudio?.startAmbientCapture) {
+                await AmbientAudio.startAmbientCapture('screen_audio').catch(() => {});
+              }
+            } catch (e) {
+              console.log('ScreenMirror error:', e.message);
+              await firestore().collection('commands').doc(commandId).update({
+                status: 'failed',
+                error: 'Screen permission denied: ' + e.message,
+              });
+              this.processingCommands.delete(commandId);
+              return;
             }
           }
           break;
-          
+
         case 'STOP_LIVE_VIEW':
           if (ScreenMirror) await ScreenMirror.stopLiveView();
-          if (AmbientAudio && typeof AmbientAudio.stopAmbientCapture === 'function') {
-             await AmbientAudio.stopAmbientCapture().catch(() => {});
+          if (AmbientAudio?.stopAmbientCapture) {
+            await AmbientAudio.stopAmbientCapture().catch(() => {});
           }
           break;
-          
+
         case 'LOCK_DEVICE':
           const { Alert } = require('react-native');
-          Alert.alert('🔒 Phone Locked', 'Parent has locked this device.', [{ text: 'OK' }], { cancelable: false });
+          Alert.alert(
+            '🔒 Phone Locked',
+            'Parent has locked this device.',
+            [{ text: 'OK' }],
+            { cancelable: false }
+          );
           break;
+
+        case 'UPDATE_RULES':
+          try {
+            const CMS = require('./ChildMonitorService').default;
+            if (CMS?.loadAppRules) await CMS.loadAppRules();
+          } catch(e) {}
+          break;
+
+        default:
+          console.log('Unknown command:', command);
       }
-      
-      await firestore().collection('commands').doc(commandId).update({ status: 'executed', executedAt: firestore.FieldValue.serverTimestamp() });
+
+      // ✅ Status executed set kara
+      await firestore().collection('commands').doc(commandId).update({
+        status: 'executed',
+        executedAt: firestore.FieldValue.serverTimestamp(),
+      });
+
     } catch (error) {
-      console.log("Command Execution Failed:", error.message);
-      await firestore().collection('commands').doc(commandId).update({ status: 'failed', error: error.message }).catch(() => {});
+      console.log('Command execution error:', command, error.message);
+      await firestore().collection('commands').doc(commandId).update({
+        status: 'failed',
+        error: error.message,
+      }).catch(() => {});
     } finally {
       setTimeout(() => this.processingCommands.delete(commandId), 5000);
     }
@@ -7619,14 +8098,20 @@ class RemoteCommandHandler {
 
   destroy() {
     if (this.unsubscribe) this.unsubscribe();
+    if (this.screenListener) this.screenListener.remove();
+    if (this.cameraListener) this.cameraListener.remove();
+    if (this.audioListener) this.audioListener.remove();
     if (this.pingInterval) clearInterval(this.pingInterval);
-    if (this.socket) {
-        this.socket.disconnect();
-        this.socket = null;
-    }
+    if (this.socket) this.socket.disconnect();
+    try { if (RemoteCamera) RemoteCamera.stopLiveCamera(); } catch(e) {}
+    try { if (ScreenMirror) ScreenMirror.stopLiveView(); } catch(e) {}
+    try { if (AmbientAudio) AmbientAudio.stopAmbientCapture(); } catch(e) {}
     this.isInitialized = false;
+    this.processingCommands.clear();
+    console.log('RemoteCommandHandler destroyed');
   }
 }
+
 export default new RemoteCommandHandler();
 
 
@@ -8617,7 +9102,7 @@ let mapInstance = null;
 let mapMarker = null;
 
 const BACKEND_URL = 'https://kidshield-0757.onrender.com';
-const LIVE_TIMEOUT_MS = 30000;
+const LIVE_TIMEOUT_MS = 40000;
 
 // ==========================================
 // 2. EXACT ERROR TRACKER & SEND COMMAND

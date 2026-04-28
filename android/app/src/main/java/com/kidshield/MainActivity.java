@@ -1,10 +1,6 @@
 package com.kidshield;
 
 import android.os.Bundle;
-import android.os.Build;
-import android.view.WindowManager;
-import android.app.KeyguardManager;
-import android.content.Context;
 import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactActivityDelegate;
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
@@ -15,23 +11,7 @@ public class MainActivity extends ReactActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // 🔥 AIRDROID FIX: लॉक-स्क्रीनच्या वर ॲप आणणे आणि स्क्रीन चालू करणे
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-            KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-            if (keyguardManager != null) {
-                keyguardManager.requestDismissKeyguard(this, null);
-            }
-        } else {
-            getWindow().addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-            );
-        }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // स्क्रीन चालू करणारा कोड काढून टाकला आहे.
     }
 
     @Override

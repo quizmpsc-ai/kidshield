@@ -1,64 +1,58 @@
-import React, { Component } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+// src/services/ErrorHandler.js
 
-// Crashlytics stub (no dependency needed)
-export const initializeCrashlytics = async (user) => {
-  console.log('[Crashlytics] User set:', user?.uid);
-};
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
-export const setupGlobalErrorHandlers = () => {
-  const originalHandler = ErrorUtils.getGlobalHandler();
-  ErrorUtils.setGlobalHandler((error, isFatal) => {
-    console.error('[GlobalError]', error?.message, 'Fatal:', isFatal);
-    if (originalHandler) originalHandler(error, isFatal);
-  });
-};
+class ErrorHandler {
+  /**
+   * ॲपमधील कोणताही एरर थेट Firebase वर पाठवण्यासाठी
+   * @param {string} featureName - उदा. 'Remote Camera', 'Location Sync', 'App Blocker'
+   * @param {Error|string} error - कॅच केलेला एक्झॅक्ट एरर
+   * @param {string} childDocId - (Optional) मुलाचा डॉक्युमेंट आयडी (child_XXXXX)
+   */
+  static async reportError(featureName, error, childDocId = null) {
+    try {
+      const errorMessage = error?.message || String(error);
+      const exactErrorString = `[${featureName} Failed]: ${errorMessage}`;
 
-// ErrorBoundary component
-export class ErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error) { console.error('[ErrorBoundary]', error); }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <View style={s.container}>
-          <Text style={s.title}>à¤•à¤¾à¤¹à¥€à¤¤à¤°à¥€ à¤šà¥à¤•à¤²à¥‡</Text>
-          <TouchableOpacity style={s.btn} onPress={() => this.setState({ hasError: false })}>
-            <Text style={s.btnText}>à¤ªà¥à¤¨à¥à¤¹à¤¾ à¤ªà¥à¤°à¤¯à¤¤à¥à¤¨ à¤•à¤°à¤¾</Text>
-          </TouchableOpacity>
-        </View>
-      );
+      // १. लोकल कन्सोलमध्ये एरर दाखवा (Android Studio मध्ये डीबगिंगसाठी)
+      console.error(`❌ KidShield System Error:`, exactErrorString);
+
+      const user = auth().currentUser;
+      if (!user) return; // युजर लॉग इन नसेल तर रिटर्न करा
+
+      // २. Parent ID मिळवा
+      const userDoc = await firestore().collection('users').doc(user.uid).get();
+      const parentId = userDoc.data()?.parentId;
+      if (!parentId) return;
+
+      // ३. Child Doc ID नसेल तर शोधा
+      let finalChildDocId = childDocId;
+      if (!finalChildDocId) {
+        const childDoc = await firestore().collection('users').doc(user.uid).get();
+        finalChildDocId = childDoc.data()?.childDocId; 
+      }
+
+      if (!finalChildDocId) return;
+
+      // ४. वेब ॲडमिनला 'System Errors' मध्ये अलर्ट पाठवा
+      await firestore()
+        .collection('families').doc(parentId)
+        .collection('children').doc(finalChildDocId)
+        .collection('alerts')
+        .add({
+          type: 'system_error',
+          message: exactErrorString,
+          timestamp: firestore.FieldValue.serverTimestamp(),
+          isRead: false
+        });
+
+      console.log(`✅ Error reported to Web Admin Dashboard!`);
+      
+    } catch (e) {
+      console.log('❌ Failed to report error to Firebase:', e.message);
     }
-    return this.props.children;
   }
 }
 
-export default class ErrorHandler extends Component {
-  constructor(props) { super(props); this.state = { hasError: false }; }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error) { console.error("App Error:", error); }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <View style={s.container}>
-          <Text style={s.title}>à¤•à¤¾à¤¹à¥€à¤¤à¤°à¥€ à¤šà¥à¤•à¤²à¥‡</Text>
-          <TouchableOpacity style={s.btn} onPress={() => this.setState({ hasError: false })}>
-            <Text style={s.btnText}>à¤ªà¥à¤¨à¥à¤¹à¤¾ à¤ªà¥à¤°à¤¯à¤¤à¥à¤¨ à¤•à¤°à¤¾</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-const s = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: '#060b14' },
-  title: { fontSize: 18, fontWeight: "bold", marginBottom: 20, color: '#fff' },
-  btn: { backgroundColor: "#00d4ff", padding: 12, borderRadius: 8 },
-  btnText: { color: "#000", fontWeight: "bold" },
-});
+export default ErrorHandler;

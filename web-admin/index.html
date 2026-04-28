@@ -372,12 +372,19 @@
           <h3 class="section-title" id="live-section-title">📹 Live Feed</h3>
           <button class="btn btn-danger btn-sm" onclick="stopAllLive()" id="btn-stop-live" style="display:none">⏹ Stop</button>
         </div>
-        <div class="stream-area" id="stream-area" style="position:relative;">
-          <button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
-          <div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-             <p style="color:var(--muted)">Select a feature above to start monitoring</p>
-          </div>
-        </div>
+       <div class="stream-area" id="stream-area" style="position:relative;">
+  
+			<button id="rotate-btn" class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:140px;z-index:10;display:none;background:rgba(0,0,0,0.6);border:none;color:white;" onclick="rotateStream()">↻ Rotate</button>
+  
+			<button id="fullscreen-btn" class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:220px;z-index:10;display:none;background:rgba(0,0,0,0.6);border:none;color:white;" onclick="toggleFullScreen()">⛶ Full Screen</button>
+
+			<button id="audio-toggle-btn" class="btn btn-primary btn-sm" style="position:absolute;top:10px;right:10px;z-index:10;display:none" onclick="toggleAudioStream()">Turn Audio ON</button>
+  
+		<div id="stream-content" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+		<p style="color:var(--muted)">Select a feature above to start monitoring</p>
+		</div>
+		</div>
+		
       </div>
     </div>
 
@@ -516,7 +523,35 @@ let statsInterval = null;
 let socket = null; 
 let isAudioActive = false;
 let audioListenerAttached = false; 
+let currentRotation = 0; // 🔥 रोटेशन ट्रॅक करण्यासाठी
 
+// ==========================================
+// 🔥 NEW: ROTATE & FULLSCREEN LOGIC
+// ==========================================
+function rotateStream() {
+  currentRotation = (currentRotation + 90) % 360;
+  const img = document.getElementById('live-stream-img');
+  if (img) {
+    img.style.transform = `rotate(${currentRotation}deg)`;
+  }
+}
+
+function toggleFullScreen() {
+  const streamArea = document.getElementById('stream-area');
+  if (!document.fullscreenElement) {
+    if (streamArea.requestFullscreen) {
+      streamArea.requestFullscreen();
+    } else if (streamArea.webkitRequestFullscreen) { /* Safari */
+      streamArea.webkitRequestFullscreen();
+    } else if (streamArea.msRequestFullscreen) { /* IE11 */
+      streamArea.msRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+}
 // 🔥 Leaflet Map Variables
 let mapInstance = null;
 let mapMarker = null;
@@ -665,14 +700,18 @@ function initSocket(userId) {
     console.log('❌ Socket disconnected:', reason);
   });
 
-  socket.on('receive_frame', (data) => {
+socket.on('receive_frame', (data) => {
     if (!currentLiveMode) return;
     if (data.childId !== currentChildId) return;
 
-    const typeMatch =
-      (currentLiveMode === 'screen'       && data.type === 'screen') ||
-      (currentLiveMode === 'camera_back'  && data.type === 'camera_back') ||
-      (currentLiveMode === 'camera_front' && data.type === 'camera_front');
+    // आपण आता camera_front आणि camera_back असे दोन प्रकार पाठवतोय
+    const isCamera = data.type === 'camera_front' || data.type === 'camera_back';
+    const isScreen = data.type === 'screen';
+
+    const typeMatch = 
+        (currentLiveMode === 'screen' && isScreen) ||
+        (currentLiveMode === 'camera_back' && data.type === 'camera_back') ||
+        (currentLiveMode === 'camera_front' && data.type === 'camera_front');
 
     if (!typeMatch) return;
 
@@ -681,12 +720,17 @@ function initSocket(userId) {
     const streamContent = document.getElementById('stream-content');
     if (!streamContent) return;
 
-    streamContent.innerHTML = `
-      <img
-        src="data:image/jpeg;base64,${data.frameBase64}"
-        style="max-width:100%;max-height:400px;object-fit:contain;border-radius:12px;"
-        onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
-      />`;
+    // इमेज डिस्प्ले लॉजिक (data:image/jpeg;base64 प्रिफिक्स विसरू नका)
+    // जुन्या <img ... /> च्या ऐवजी हे टाका:
+    streamContent.innerHTML = `
+      <img id="live-stream-img"
+        src="data:image/jpeg;base64,${data.frameBase64}"
+        style="width:100%; height:auto; max-height:80vh; object-fit:contain; border-radius:12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); transform: rotate(${currentRotation}deg); transition: transform 0.3s ease;"
+        onerror="this.parentNode.innerHTML='<p style=color:red>Frame decode error</p>'"
+      />
+      <div style="position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,0.6); padding:4px 10px; border-radius:4px; font-size:12px; color:white;">
+         ${data.type.toUpperCase()} | LIVE
+      </div>`;
 
     const statusEl = document.getElementById('status-' + currentLiveMode);
     if (statusEl) {
@@ -694,7 +738,13 @@ function initSocket(userId) {
       statusEl.className = 'live-status on';
     }
     document.getElementById('audio-toggle-btn').style.display = 'block';
-  });
+	// 🔥 नवीन बटन्स show करण्यासाठी
+    const rotateBtn = document.getElementById('rotate-btn');
+    if(rotateBtn) rotateBtn.style.display = 'block';
+    
+    const fsBtn = document.getElementById('fullscreen-btn');
+    if(fsBtn) fsBtn.style.display = 'block';
+});
 
   attachAudioListener();
 }
@@ -734,10 +784,11 @@ function toggleLive(mode) {
   document.getElementById('live-section-title').innerHTML = titles[mode] || '📹 Live Feed';
 
   const streamContent = document.getElementById('stream-content');
-  streamContent.innerHTML = `
+streamContent.innerHTML = `
     <div style="text-align:center;padding:40px">
       <div class="spinner" style="margin:0 auto 16px"></div>
-      <p style="color:var(--muted)">Connecting via WebSockets...</p>
+      <p style="color:var(--accent); font-weight:bold;">Connecting to Child Device...</p>
+      <p style="color:var(--muted); font-size:12px; margin-top:8px;">Please wait, it may take 20-30 seconds if the server was inactive.</p>
     </div>`;
 
   document.getElementById('audio-toggle-btn').style.display = 'none';
@@ -779,15 +830,25 @@ function stopAllLive() {
   document.querySelectorAll('.live-status').forEach(s => { s.textContent = 'Click to start'; s.className = 'live-status'; });
 
   document.getElementById('btn-stop-live').style.display = 'none';
+  
+  // Audio Button Reset
   document.getElementById('audio-toggle-btn').style.display = 'none';
   document.getElementById('audio-toggle-btn').textContent = 'Turn Audio ON';
   document.getElementById('audio-toggle-btn').className = 'btn btn-primary btn-sm';
+
+  // 🔥 नवीन बटन्स hide करण्यासाठी आणि रोटेशन रिसेट करण्यासाठी
+  const rotateBtn = document.getElementById('rotate-btn');
+  if(rotateBtn) rotateBtn.style.display = 'none';
+  
+  const fsBtn = document.getElementById('fullscreen-btn');
+  if(fsBtn) fsBtn.style.display = 'none';
+  
+  currentRotation = 0; // स्ट्रीम थांबल्यावर रोटेशन रिसेट करा
 
   const streamContent = document.getElementById('stream-content');
   if (streamContent) streamContent.innerHTML = '<p style="color:var(--muted)">Select a feature above to start monitoring</p>';
   document.getElementById('live-section-title').innerHTML = '📹 Live Feed';
 }
-
 function toggleAudioStream() {
   if (!currentChildId || !currentLiveMode) return;
   isAudioActive = !isAudioActive;
@@ -815,8 +876,8 @@ auth.onAuthStateChanged(user => {
 
     initSocket(user.uid);
     loadChildren();
-    if (statsInterval) clearInterval(statsInterval);
-    statsInterval = setInterval(loadLiveStats, 30000);
+    //if (statsInterval) clearInterval(statsInterval);
+    //statsInterval = setInterval(loadLiveStats, 30000);
   } else {
     stopAllLive();
     document.getElementById('login-page').style.display = 'flex';
@@ -1055,9 +1116,85 @@ async function unblockDomain(domain) { await db.collection('families').doc(curre
 
 function openTimeLimitModal() { document.getElementById('modal-time-limit').classList.add('open'); }
 function closeTimeLimitModal() { document.getElementById('modal-time-limit').classList.remove('open'); }
-async function saveTimeLimits() { closeTimeLimitModal(); }
-function loadScreenTimeSection() {}
+async function saveTimeLimits() {
+  if (!currentChildId || !currentParentId) return;
 
+  const dailyHours = document.getElementById('daily-limit-hours').value || 0;
+  const bedtimeStart = document.getElementById('bedtime-start').value || '';
+  const bedtimeEnd = document.getElementById('bedtime-end').value || '';
+  const weekendDifferent = document.getElementById('weekend-different').checked;
+  const weekendHours = document.getElementById('weekend-limit-hours').value || 0;
+
+  try {
+    // Firebase Firestore मध्ये डेटा सेव्ह करणे
+    await db.collection('families').doc(currentParentId).collection('children').doc(currentChildId).set({
+      screenTimeRules: {
+        dailyLimitHours: parseFloat(dailyHours),
+        bedtimeStart: bedtimeStart,
+        bedtimeEnd: bedtimeEnd,
+        weekendDifferent: weekendDifferent,
+        weekendLimitHours: parseFloat(weekendHours)
+      }
+    }, { merge: true });
+
+    closeTimeLimitModal();
+    // UI अपडेट करण्यासाठी फंक्शन कॉल
+    loadScreenTimeSection();
+  } catch (err) {
+    alert('Error saving limits: ' + err.message);
+  }
+}
+
+function loadScreenTimeSection() {
+  if (!currentChildData) return;
+
+  const rules = currentChildData.screenTimeRules || {};
+  const dailyLimit = rules.dailyLimitHours || 0;
+  const bedtimeStart = rules.bedtimeStart || '--:--';
+  const bedtimeEnd = rules.bedtimeEnd || '--:--';
+
+  // १. डॅशबोर्ड UI अपडेट करा
+  document.getElementById('st-daily-limit').textContent = dailyLimit > 0 ? dailyLimit : '--';
+  document.getElementById('st-bedtime').textContent = bedtimeStart !== '--:--' ? `${bedtimeStart} to ${bedtimeEnd}` : '--';
+
+  // २. Today's Usage Bar आणि Text अपडेट करा
+  const usedMins = currentChildData.todayMinutes || 0;
+  const usedHoursDisplay = Math.floor(usedMins / 60);
+  const usedMinsDisplay = usedMins % 60;
+  document.getElementById('usage-text').textContent = `${usedHoursDisplay}h ${usedMinsDisplay}m used`;
+
+  // प्रोग्रेस बारची लांबी (Width) आणि रंग (Color) ठरवणे
+  const limitMins = dailyLimit * 60;
+  let percent = 0;
+  if (limitMins > 0) {
+    percent = Math.min(100, (usedMins / limitMins) * 100);
+  }
+  const usageBar = document.getElementById('usage-bar');
+  if (usageBar) {
+    usageBar.style.width = percent + '%';
+    // ८0% च्या वर गेल्यास पिवळा, १००% झाल्यावर लाल
+    usageBar.style.background = percent >= 100 ? 'var(--danger)' : (percent >= 80 ? 'var(--warning)' : 'var(--accent)');
+  }
+
+  // ३. Modal मधील Inputs मध्ये जुना डेटा सेट करा (जेणेकरून Edit करताना सोपे जाईल)
+  document.getElementById('daily-limit-hours').value = dailyLimit || '';
+  document.getElementById('bedtime-start').value = rules.bedtimeStart || '';
+  document.getElementById('bedtime-end').value = rules.bedtimeEnd || '';
+  document.getElementById('weekend-different').checked = rules.weekendDifferent || false;
+  document.getElementById('weekend-limit-hours').value = rules.weekendLimitHours || '';
+  
+  const weekendField = document.getElementById('weekend-limit-field');
+  if (weekendField) {
+     weekendField.style.display = rules.weekendDifferent ? 'block' : 'none';
+  }
+}
+
+// वीकेंड टॉगलसाठी इव्हेंट लिसनर (फाईलच्या शेवटी <script> च्या आत कुठेही टाक)
+document.getElementById('weekend-different')?.addEventListener('change', function(e) {
+   const weekendField = document.getElementById('weekend-limit-field');
+   if (weekendField) weekendField.style.display = e.target.checked ? 'block' : 'none';
+});
+ 
 function loadLocation() {
   if (!currentChildId) return;
   if (locationUnsubscribe) locationUnsubscribe();
@@ -1094,7 +1231,7 @@ function loadLocation() {
         L.control.layers(baseMaps).addTo(mapInstance);
         
         mapMarker = L.marker([lat, lng]).addTo(mapInstance);
-        setTimeout(() => mapInstance.invalidateSize(), 500);
+        setTimeout(() => mapInstance.invalidateSize(), 1000);
       } else {
         mapInstance.setView([lat, lng], mapInstance.getZoom());
         mapMarker.setLatLng([lat, lng]);
