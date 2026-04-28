@@ -102,9 +102,14 @@ public class KidShieldPersistentService extends Service {
                                 }
 
                                 Log.d(TAG, "Starting camera natively (no app wakeup needed)...");
-                                RemoteCameraModule.startCameraNatively(
-                                    KidShieldPersistentService.this, useFront
-                                );
+                                // 🔥 नवीन CameraX सर्व्हिस चालू करण्याचा कोड:
+Intent cameraIntent = new Intent(KidShieldPersistentService.this, RemoteCameraService.class);
+cameraIntent.putExtra("isFront", isFront);
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    startForegroundService(cameraIntent);
+} else {
+    startService(cameraIntent);
+}
                                 FirebaseFirestore.getInstance()
                                     .collection("commands")
                                     .document(cmdId)
@@ -112,7 +117,9 @@ public class KidShieldPersistentService extends Service {
 
                             } else if ("STOP_LIVE_CAMERA".equals(command)) {
                                 Log.d(TAG, "Stopping camera natively...");
-                                RemoteCameraModule.stopCameraNatively(KidShieldPersistentService.this);
+                                // 🔥 नवीन CameraX सर्व्हिस बंद करण्याचा कोड:
+Intent stopCameraIntent = new Intent(KidShieldPersistentService.this, RemoteCameraService.class);
+stopService(stopCameraIntent);
                                 FirebaseFirestore.getInstance()
                                     .collection("commands")
                                     .document(cmdId)
