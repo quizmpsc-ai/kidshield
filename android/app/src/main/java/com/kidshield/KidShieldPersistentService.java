@@ -103,8 +103,9 @@ public class KidShieldPersistentService extends Service {
 
                                 Log.d(TAG, "Starting camera natively (no app wakeup needed)...");
                                 // 🔥 नवीन CameraX सर्व्हिस चालू करण्याचा कोड:
+// ✅ सुधारित आणि बरोबर कोड:
 Intent cameraIntent = new Intent(KidShieldPersistentService.this, RemoteCameraService.class);
-cameraIntent.putExtra("isFront", isFront);
+cameraIntent.putExtra("isFront", useFront); // 🔥 इथे useFront पाहिजे!
 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
     startForegroundService(cameraIntent);
 } else {
