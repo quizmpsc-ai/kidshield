@@ -1,58 +1,38 @@
-// src/services/ErrorHandler.js
+import React from 'react';
+import { View, Text, SafeAreaView } from 'react-native';
 
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+// ✅ Fixed: Exported ErrorBoundary properly so App.js can import it!
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-class ErrorHandler {
-  /**
-   * ॲपमधील कोणताही एरर थेट Firebase वर पाठवण्यासाठी
-   * @param {string} featureName - उदा. 'Remote Camera', 'Location Sync', 'App Blocker'
-   * @param {Error|string} error - कॅच केलेला एक्झॅक्ट एरर
-   * @param {string} childDocId - (Optional) मुलाचा डॉक्युमेंट आयडी (child_XXXXX)
-   */
-  static async reportError(featureName, error, childDocId = null) {
-    try {
-      const errorMessage = error?.message || String(error);
-      const exactErrorString = `[${featureName} Failed]: ${errorMessage}`;
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
 
-      // १. लोकल कन्सोलमध्ये एरर दाखवा (Android Studio मध्ये डीबगिंगसाठी)
-      console.error(`❌ KidShield System Error:`, exactErrorString);
+  componentDidCatch(error, errorInfo) {
+    console.log("Global Error Caught: ", error, errorInfo);
+  }
 
-      const user = auth().currentUser;
-      if (!user) return; // युजर लॉग इन नसेल तर रिटर्न करा
-
-      // २. Parent ID मिळवा
-      const userDoc = await firestore().collection('users').doc(user.uid).get();
-      const parentId = userDoc.data()?.parentId;
-      if (!parentId) return;
-
-      // ३. Child Doc ID नसेल तर शोधा
-      let finalChildDocId = childDocId;
-      if (!finalChildDocId) {
-        const childDoc = await firestore().collection('users').doc(user.uid).get();
-        finalChildDocId = childDoc.data()?.childDocId; 
-      }
-
-      if (!finalChildDocId) return;
-
-      // ४. वेब ॲडमिनला 'System Errors' मध्ये अलर्ट पाठवा
-      await firestore()
-        .collection('families').doc(parentId)
-        .collection('children').doc(finalChildDocId)
-        .collection('alerts')
-        .add({
-          type: 'system_error',
-          message: exactErrorString,
-          timestamp: firestore.FieldValue.serverTimestamp(),
-          isRead: false
-        });
-
-      console.log(`✅ Error reported to Web Admin Dashboard!`);
-      
-    } catch (e) {
-      console.log('❌ Failed to report error to Firebase:', e.message);
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060b14', justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#ef4444', fontSize: 22, fontWeight: 'bold' }}>⚠️ Crash Prevented!</Text>
+          <Text style={{ color: '#8899aa', marginTop: 10, textAlign: 'center', padding: 20 }}>
+            {this.state.error ? this.state.error.toString() : "An unknown error occurred."}
+          </Text>
+        </SafeAreaView>
+      );
     }
+    return this.props.children;
   }
 }
+
+const ErrorHandler = {
+  logError: (error) => console.log("ErrorHandler Log:", error)
+};
 
 export default ErrorHandler;
