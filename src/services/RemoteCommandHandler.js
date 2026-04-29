@@ -1,12 +1,12 @@
 // src/services/RemoteCommandHandler.js
-// ✅ ALL BUGS FIXED - Complete Working Version
+// âœ… ALL BUGS FIXED - Complete Working Version
 
 import { NativeModules, NativeEventEmitter, AppState } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import io from 'socket.io-client';
 
-const { RemoteCamera, AmbientAudio, ScreenMirror, KidShieldModule } = NativeModules;
+const { RemoteCamera, AmbientAudio, ScreenMirror } = NativeModules;`nconst KidShieldModule = NativeModules.KidShieldModule || null;
 const SOCKET_SERVER_URL = 'https://kidshield-0757.onrender.com';
 
 class RemoteCommandHandler {
@@ -36,20 +36,20 @@ class RemoteCommandHandler {
       const data = doc.data();
       this.parentId = data?.parentId || null;
 
-      // ✅ BUG FIX (CRITICAL): childId correct set kara
+      // âœ… BUG FIX (CRITICAL): childId correct set kara
       //
       // PROBLEM (Old code):
-      //   this.childId = user.uid  → "bekAhk98wIMAeBZ9Os6wdnEa42D3" (actual Firebase UID)
+      //   this.childId = user.uid  â†’ "bekAhk98wIMAeBZ9Os6wdnEa42D3" (actual Firebase UID)
       //   pan commands collection madhe childId = "child_1776675070755" (child_XXXXX format)
       //   MISMATCH! Commands kabhi receive hot navhate!
       //
       // SOLUTION:
-      //   Firestore users/{uid} document madhe "childId" field aahe → "child_XXXXX"
+      //   Firestore users/{uid} document madhe "childId" field aahe â†’ "child_XXXXX"
       //   Hach value commands collection madhe pathavli jaate
-      //   So: this.childId = data.childId (child_XXXXX) ← CORRECT MATCH!
+      //   So: this.childId = data.childId (child_XXXXX) â† CORRECT MATCH!
       this.childId = data?.childId || user.uid;
 
-      console.log(`✅ RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
+      console.log(`âœ… RemoteCommand: childId=${this.childId}, parentId=${this.parentId}`);
 
       if (!this.parentId) {
         console.log('RemoteCommand: No parent linked yet - skipping');
@@ -74,10 +74,10 @@ class RemoteCommandHandler {
       AppState.addEventListener('change', this._handleAppStateChange.bind(this));
 
       this.isInitialized = true;
-      console.log('✅ RemoteCommandHandler Ready! childId:', this.childId);
+      console.log('âœ… RemoteCommandHandler Ready! childId:', this.childId);
 
     } catch (err) {
-      console.log('❌ RemoteCommand Init Error:', err.message);
+      console.log('âŒ RemoteCommand Init Error:', err.message);
     }
   }
 
@@ -104,7 +104,7 @@ class RemoteCommandHandler {
     });
 
     this.socket.on('connect', () => {
-      console.log('✅ Socket Connected:', this.socket.id);
+      console.log('âœ… Socket Connected:', this.socket.id);
       this.socket.emit('join_room', { parentId: this.parentId });
 
       // Keep-alive ping
@@ -117,7 +117,7 @@ class RemoteCommandHandler {
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('⚠️ Socket Disconnected:', reason);
+      console.log('âš ï¸ Socket Disconnected:', reason);
       // Parent disconnected tar sagle streams band kara
       this._forceStopAllFeatures();
       if (this.pingInterval) clearInterval(this.pingInterval);
@@ -193,10 +193,10 @@ class RemoteCommandHandler {
 
     console.log('Attaching command listener for childId:', this.childId);
 
-    // ✅ this.childId = "child_XXXXX" format → commands collection match karil!
+    // âœ… this.childId = "child_XXXXX" format â†’ commands collection match karil!
     this.unsubscribe = firestore()
       .collection('commands')
-      .where('childId', '==', this.childId) // ← CORRECT: "child_XXXXX"
+      .where('childId', '==', this.childId) // â† CORRECT: "child_XXXXX"
       .where('status', '==', 'pending')
       .onSnapshot(
         snap => {
@@ -218,7 +218,7 @@ class RemoteCommandHandler {
     const { command, data = {}, createdAt } = commandData;
     console.log('Executing command:', command);
 
-    // ✅ Auto-expire: 60 seconds juna command ignore kara
+    // âœ… Auto-expire: 60 seconds juna command ignore kara
     if (createdAt) {
       const cmdTime = createdAt.toDate?.().getTime() || 0;
       if (Date.now() - cmdTime > 60000) {
@@ -234,9 +234,9 @@ class RemoteCommandHandler {
       await firestore().collection('commands').doc(commandId)
         .update({ status: 'processing' });
 
-      // ✅ Screen/Audio commands sathi app wake kara
+      // âœ… Screen/Audio commands sathi app wake kara
       if (['START_LIVE_VIEW', 'START_AUDIO_CAPTURE'].includes(command)) {
-        if (KidShieldModule?.wakeApp) {
+        if (KidShieldModule && typeof KidShieldModule.wakeApp === "function") {
           await KidShieldModule.wakeApp().catch(() => {});
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
@@ -306,7 +306,7 @@ class RemoteCommandHandler {
         case 'LOCK_DEVICE':
           const { Alert } = require('react-native');
           Alert.alert(
-            '🔒 Phone Locked',
+            'ðŸ”’ Phone Locked',
             'Parent has locked this device.',
             [{ text: 'OK' }],
             { cancelable: false }
@@ -324,7 +324,7 @@ class RemoteCommandHandler {
           console.log('Unknown command:', command);
       }
 
-      // ✅ Status executed set kara
+      // âœ… Status executed set kara
       await firestore().collection('commands').doc(commandId).update({
         status: 'executed',
         executedAt: firestore.FieldValue.serverTimestamp(),
